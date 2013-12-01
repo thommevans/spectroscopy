@@ -20,7 +20,7 @@ class stellar():
         # Header keywords:
         self.header_kws = {}
         self.header_kws['JD'] = ''
-        self.header_kws['EXPTIME'] = ''        
+        self.header_kws['EXPTIME_SECS'] = ''        
 
         # Trace fitting keywords:
         self.tracefit_kwargs = { 'method':'linear_interpolation', \
