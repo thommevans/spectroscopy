@@ -17,11 +17,11 @@ class stellar():
         self.badpix_static = ''
         self.science_traces_list = ''
 
-        # Header keywords:
-        self.header_kws = {}
-        self.header_kws['JD'] = ''
-        self.header_kws['EXPTIME_SECS'] = ''
-        self.header_kws['GAIN'] = ''
+        # Arrays containing basic
+        # info for each frame:
+        self.jds = None
+        self.gains = None
+        self.exptime_secs = None
 
         # Trace fitting keywords:
         self.tracefit_kwargs = { 'method':'linear_interpolation', \
