@@ -648,6 +648,14 @@ def extract_spectra( stellar ):
         header = image_hdu[0].read_header()
         darray = image_hdu[1].read_image()
         arr_dims = np.shape( darray )
+        if stellar.header_kws['GAIN']!='':
+            gain = header[stellar.header_kws['GAIN']]
+        else:
+            gain = 1.0
+        if stellar.header_kws['EXPTIME_SECS']!='':
+            exptime_secs = header[stellar.header_kws['EXPTIME_SECS']]
+        else:
+            exptime_secs = 1.0
         try:
             badpix_transient = image_hdu[2].read_image()
             if badpix_static!=None:
@@ -663,8 +671,7 @@ def extract_spectra( stellar ):
         disp_pixrange = np.arange( arr_dims[stellar.disp_axis] )
         crossdisp_pixrange = np.arange( arr_dims[stellar.crossdisp_axis] )        
         image_hdu.close()
-        jdobs = header[stellar.header_kws['JD']] \
-                + 0.5*header[stellar.header_kws['EXPTIME_SECS']]/60./60./24.
+        jdobs = header[stellar.header_kws['JD']] + 0.5*exptime_secs/60./60./24.
 
         # Loop over each star:
         for k in range( stellar.nstars ):
@@ -837,9 +844,9 @@ def extract_spectra( stellar ):
                                                 ( 'nappixs', np.float64 ), \
                                                 ( 'skyppix', np.float64 ) ] )
             data['disp_pixs'] = disp_pixs
-            data['apflux'] = apflux
+            data['apflux'] = apflux*gain
             data['nappixs'] = nappixs
-            data['skyppix'] = skyppix
+            data['skyppix'] = skyppix*gain
             if os.path.isfile( ospec_filepath ):
                 os.remove( ospec_filepath )
             fits = fitsio.FITS( ospec_filepath, 'rw' )
