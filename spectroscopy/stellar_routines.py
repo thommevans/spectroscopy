@@ -567,7 +567,7 @@ def fit_traces( stellar, make_plots=False ):
             specwidths_str += ' {0:.2f},'.format( specwidths[j,k] )
         print 'PSF widths (pixels) -', specwidths_str[:-1]
         t2=time.time()
-        print t2-t1
+        #print t2-t1
 
     # Summarise the PSF width info:
     med = np.median( specwidths, axis=0 ) # median PSF width for each star
@@ -581,9 +581,11 @@ def fit_traces( stellar, make_plots=False ):
     plt.ylabel( 'PSF width (pixels)' )
     plt.xlabel( 'Image number' )
     plt.legend()
-    ofigname = os.path.join( stellar.adir, 'PSF_widths.png' )
+    ofigname = os.path.join( stellar.adir, 'psf_widths.png' )
     plt.savefig( ofigname )
     plt.close()
+    ofilename = os.path.join( stellar.adir, 'psf_widths.npy' )
+    np.savetxt( ofilename, specwidths )
     m = np.median( specwidths, axis=1 ) # median PSF width for each image
     ix = np.argmax( m ) # image number with widest PSF
     print '\nThe frame with the largest median PSF is:'
@@ -596,7 +598,9 @@ def fit_traces( stellar, make_plots=False ):
         science_traces_ofiles[k].close()
         ofilename = os.path.basename( stellar.science_traces_list[k] )
         print 'star{0} --> {1}'.format( k, ofilename )
-
+    print '\nSaved PSF widths for each star in each frame in:\n{0}'\
+          .format( ofilename )
+    print 'Saved corresponding figure:\n{0}'.format( ofigname )
     plt.ion()
 
     return None
