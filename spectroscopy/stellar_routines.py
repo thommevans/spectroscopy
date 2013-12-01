@@ -656,6 +656,7 @@ def extract_spectra( stellar ):
             exptime_secs = header[stellar.header_kws['EXPTIME_SECS']]
         else:
             exptime_secs = 1.0
+        pdb.set_trace()
         try:
             badpix_transient = image_hdu[2].read_image()
             if badpix_static!=None:
