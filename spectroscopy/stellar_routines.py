@@ -438,7 +438,7 @@ def fit_traces( stellar, make_plots=False ):
                 g_k += [ gauss_profile( crossdisp_pixs, pars_optimised ) ]
                 s_k += [ abs( sig ) ]
 
-            specwidths[j,k] = 0.8*np.median( s_k )
+            specwidths[j,k] = np.median( s_k )
             
             # Now that we've fit for the centres of each bin along the
             # dispersion axis, we can interpolate these to a spectral
@@ -999,6 +999,7 @@ def gauss_resids( pars, x, y ):
     mu = pars[4]
     m = gauss_profile( x, pars )
     r = y - m
+
     return r
 
     
@@ -1012,7 +1013,7 @@ def gauss_profile( x, pars ):
     sig = pars[3]
     mu = pars[4]
     m = A + B*x + C*np.exp( -0.5*( ( ( x-mu )/sig )**2. ) )
-    #print '\n\n\n{0}'.format(sig)
+
     return m
 
 
