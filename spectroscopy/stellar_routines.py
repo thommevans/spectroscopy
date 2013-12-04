@@ -892,13 +892,17 @@ def calibrate_wavelength_scale( stellar, make_plots=False ):
             disp_pixbounds = stellar.wcal_kws['disp_pixbounds'][k][j]
             dl = disp_pixbounds[0]
             du = disp_pixbounds[1]
+            disp_pixs = np.arange( dl, du+1, 1 )
             cl = crossdisp_pixbounds[0]
             cu = crossdisp_pixbounds[1]
             if stellar.disp_axis==0:
                 disp_prof = np.sum( marc[:,cl:cu+1][dl:du+1,:], axis=1 )
             else:
                 disp_prof = np.sum( marc[cl:cu+1,:][:,dl:du+1], axis=0 )
-            disp_pixs = np.arange( dl, du+1, 1 )
+            # Ensure the dispersion profile is in reasonable units:
+            disp_prof -= np.median( disp_prof )
+            disp_prof /= disp_prof.max()
+
             
             A0 = disp_prof.min()
             B0 = 0.
@@ -924,12 +928,6 @@ def calibrate_wavelength_scale( stellar, make_plots=False ):
         offset = np.ones( len( pix ) )
         basis = np.column_stack( [ offset, pix ] )
         wav_linfit_coeffs += [ np.linalg.lstsq( basis, wav )[0] ]
-
-        # Evaluate the wavelength solution across
-        # the full dispersion axis:
-        #offset = np.ones( len( disp_pixrange ) )
-        #basis = np.column_stack( [ offset, disp_pixrange ] )
-        #wav_solutions += [ np.dot( basis, coeffs ) ]
 
     # Now go through all the spectra that have already been generated
     # and add a column to the fits table containing the wavelengths:
@@ -959,14 +957,15 @@ def calibrate_wavelength_scale( stellar, make_plots=False ):
                 except:
                     spectrum_hdu[1].write_column( 'wav', wav )
                 spectrum_hdu.close()
+
         if make_plots==True:
             ofolder_ext = 'spectra_pngs'
             ofolder = os.path.join( stellar.adir, ofolder_ext )
             if os.path.isdir( ofolder )!=True:
                 os.makedirs( ofolder )
-            print 'Making plots and saving as png files...'
             for j in range( nimages ):
-                print ' ... image {0} of {1}'.format( j+1, nimages )
+                print 'Making plot and saving as png for image {0} of {1}'\
+                      .format( j+1, nimages )
                 plt.figure()
                 for k in range( stellar.nstars ):
                     spectrum_file_kj = os.path.join( stellar.adir, spectra_files[k][j] )
