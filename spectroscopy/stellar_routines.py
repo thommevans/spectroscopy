@@ -946,9 +946,11 @@ def calibrate_wavelength_scale( stellar, make_plots=False ):
         spectra_files = []
         for k in range( stellar.nstars ):
             print ' ... star{0}'.format( k )
-            spectra_files += [ np.loadtxt( stellar.science_spectra_lists[k], dtype=str ) ]
+            science_spectra_list_k = os.path.join( stellar.adir, stellar.science_spectra_lists[k] )
+            spectra_files += [ np.loadtxt( science_spectra_list_k, dtype=str ) ]
             for j in range( nimages ):
-                spectrum_hdu = fitsio.FITS( spectra_files[k][j], 'rw' )
+                spectra_file_jk = os.path.join( stellar.adir, spectra_files[k][j] )
+                spectrum_hdu = fitsio.FITS( spectra_file_jk, 'rw' )
                 disp_pixs = spectrum_hdu[1]['disp_pixs'].read()
                 offset = np.ones( len( disp_pixs ) )
                 basis = np.column_stack( [ offset, disp_pixs ] )
@@ -968,8 +970,8 @@ def calibrate_wavelength_scale( stellar, make_plots=False ):
                 print ' ... image {0} of {1}'.format( j+1, nimages )
                 plt.figure()
                 for k in range( stellar.nstars ):
-                    spectrum_file = spectra_files[k][j]
-                    spectrum_hdu = fitsio.FITS( spectrum_file, 'r' )
+                    spectrum_file_kj = os.path.join( stellar.adir, spectra_files[k][j] )
+                    spectrum_hdu = fitsio.FITS( spectrum_file_kj, 'r' )
                     wav = spectrum_hdu[1].read_column( 'wav' )
                     spectrum = spectrum_hdu[1].read_column( 'apflux' )
                     spectrum_hdu.close()
