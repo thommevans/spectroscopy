@@ -705,7 +705,8 @@ def extract_spectra( stellar ):
                 subarray = darray[:,disp_ixs][crossdisp_ixs,:]
 
             # Read in the array containing the trace fit:
-            trarray = np.loadtxt( trace_files[k][j] )
+            trace_file_path_kj = os.path.join( stellar.adir, trace_files[k][j] )
+            trarray = np.loadtxt( trace_file_path_kj )
             apflux = np.zeros( npix_disp )
             nappixs = np.zeros( npix_disp )
             skyppix = np.zeros( npix_disp )
