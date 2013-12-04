@@ -565,7 +565,7 @@ def fit_traces( stellar, make_plots=False ):
         specwidths_str = ''
         for k in range( stellar.nstars ):
             specwidths_str += ' {0:.2f},'.format( specwidths[j,k] )
-        print 'PSF widths (pixels) -', specwidths_str[:-1]
+        print 'PSF FWHMs (pixels) -', 2.355*specwidths_str[:-1]
         t2=time.time()
         #print t2-t1
 
