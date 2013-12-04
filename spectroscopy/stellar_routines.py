@@ -331,7 +331,7 @@ def fit_traces( stellar, make_plots=False ):
 
     # Keep trace of the spectral trace widths
     # across all images:
-    specwidths = np.zeros( [ nimages, stellar.nstars ] )
+    fwhms = np.zeros( [ nimages, stellar.nstars ] )
 
     # Loop over the science images, fitting
     # for the spectral traces:
@@ -438,7 +438,7 @@ def fit_traces( stellar, make_plots=False ):
                 g_k += [ gauss_profile( crossdisp_pixs, pars_optimised ) ]
                 s_k += [ abs( sig ) ]
 
-            specwidths[j,k] = np.median( s_k )
+            fwhms[j,k] = 2.355*np.median( s_k )
             
             # Now that we've fit for the centres of each bin along the
             # dispersion axis, we can interpolate these to a spectral
@@ -562,22 +562,22 @@ def fit_traces( stellar, make_plots=False ):
             plt.savefig( ofigpath )
             plt.close()
             print ' ... saved figure {0}'.format( ofigname )
-        specwidths_str = ''
+        fwhms_str = ''
         for k in range( stellar.nstars ):
-            specwidths_str += ' {0:.2f},'.format( specwidths[j,k] )
-        print 'PSF FWHMs (pixels) -', 2.355*specwidths_str[:-1]
+            fwhms_str += ' {0:.2f},'.format( fwhms[j,k] )
+        print 'PSF FWHMs (pixels) -', fwhms_str[:-1]
         t2=time.time()
         #print t2-t1
 
     # Summarise the PSF width info:
-    med = np.median( specwidths, axis=0 ) # median PSF width for each star
-    std = np.std( specwidths, axis=0 ) # PSF width scatter for each star
+    med = np.median( fwhms, axis=0 ) # median PSF width for each star
+    std = np.std( fwhms, axis=0 ) # PSF width scatter for each star
     print '\nPSF widths across all images in units of pixels'
     print '# median, scatter'
     plt.figure()
     for k in range( stellar.nstars ):
         print 'star{0} = {1:.3f}, {2:.3f}'.format( k, med[k], std[k] )
-        plt.plot( specwidths[:,k], '-', label='star{0}'.format( k ) )
+        plt.plot( fwhms[:,k], '-', label='star{0}'.format( k ) )
     plt.ylabel( 'PSF width (pixels)' )
     plt.xlabel( 'Image number' )
     plt.legend()
@@ -585,13 +585,13 @@ def fit_traces( stellar, make_plots=False ):
     plt.savefig( ofigname )
     plt.close()
     ofilename = os.path.join( stellar.adir, 'psf_widths.npy' )
-    np.savetxt( ofilename, specwidths )
-    m = np.median( specwidths, axis=1 ) # median PSF width for each image
+    np.savetxt( ofilename, fwhms )
+    m = np.median( fwhms, axis=1 ) # median PSF width for each image
     ix = np.argmax( m ) # image number with widest PSF
     print '\nThe frame with the largest median PSF is:'
     print science_images[ix]
     print 'with PSF width of {0:.3f} pixels'.format( m[ix] )
-    z = np.std( specwidths, axis=1 ) # spread amongst stars per image
+    z = np.std( fwhms, axis=1 ) # spread amongst stars per image
     
     print '\nSaved list of traces for each star in:'
     for k in range( stellar.nstars ):
