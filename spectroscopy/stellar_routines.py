@@ -863,14 +863,14 @@ def extract_spectra( stellar ):
     return None
 
     
-def calibrate_wavelength_scale( stellar, make_plots=False ):
+def calibrate_wavelength_scale( stellar, poly_order=1, make_plots=False ):
     """
     Use the pre-determined dispersion pixel coordinates of the fiducial
     lines from the master arc frame to fit a linear mapping from the
     dispersion axis to the wavelength scale for each star.
     """
 
-    plt.ioff()
+    #plt.ioff()
     
     marc_hdu = fitsio.FITS( stellar.wcal_kws['marc_file'], 'r' )
     marc = marc_hdu[1].read_image()
@@ -883,55 +883,69 @@ def calibrate_wavelength_scale( stellar, make_plots=False ):
     disp_pixrange = np.arange( 0, npix_disp, 1 )
     fiducial_lines = stellar.wcal_kws['fiducial_lines']
     nlines = len( fiducial_lines )
-    pixel_coords = []
-    wav_linfit_coeffs = []
+    stellar.wavsol = {}
+    stellar.wavsol['poly_order'] = poly_order
+    stellar.wavsol['disp_pixs_input'] = [] #pixel_coords = []
+    stellar.wavsol['wav_fits_output'] = []
+    stellar.wavsol['wavsol_coeffs'] = []
+    print '\n\nFitting cross-dispersion line profiles for each star'
+    print 'using a polynomial of order {0}:'.format( poly_order )
     for k in range( stellar.nstars ):
         crossdisp_pixbounds = stellar.wcal_kws['crossdisp_pixbounds'][k]
-        pixel_coords_k = []
+        disp_pixs_input_k = []
+        print '\nstar{0}...'.format( k )
         for j in range( nlines ):
             disp_pixbounds = stellar.wcal_kws['disp_pixbounds'][k][j]
             dl = disp_pixbounds[0]
             du = disp_pixbounds[1]
-            disp_pixs = np.arange( dl, du+1, 1 )
             cl = crossdisp_pixbounds[0]
             cu = crossdisp_pixbounds[1]
             if stellar.disp_axis==0:
                 disp_prof = np.sum( marc[:,cl:cu+1][dl:du+1,:], axis=1 )
             else:
-                disp_prof = np.sum( marc[cl:cu+1,:][:,dl:du+1], axis=0 )
-            # Ensure the dispersion profile is in reasonable units:
-            disp_prof -= np.median( disp_prof )
-            disp_prof /= disp_prof.max()
-
+                disp_prof = np.sum( marc[cl:cu+1,:][:,dl:du+1], axis=0 )            
+            disp_pixs_kj = np.arange( dl, du+1, 1 )
             
             A0 = disp_prof.min()
             B0 = 0.
             C0 = disp_prof.max() - disp_prof.min()
             ix = np.argmax( disp_prof )
-            mu0 = disp_pixs[ix]
-            disp_prof_shifted = disp_prof - 0.5*C0
+            mu0 = disp_pixs_kj[ix]
+            disp_prof_shifted = disp_prof - A0 - 0.7*C0
             ixs = ( disp_prof_shifted>0 )
-            sig0 = disp_pixs[ixs][-1] - disp_pixs[ixs][0]
+            sig0 = disp_pixs_kj[ixs][-1] - disp_pixs_kj[ixs][0]
             pars0 = np.array( [ A0, B0, C0, sig0, mu0 ] )
-            pars_optimised = scipy.optimize.leastsq( gauss_resids, \
-                                                     pars0, \
-                                                     args=( disp_pixs, \
+            pars_optimised = scipy.optimize.leastsq( gauss_resids, pars0, \
+                                                     args=( disp_pixs_kj, \
                                                             disp_prof ) )[0]
             A, B, C, sig, mu = pars_optimised
-            pixel_coords_k += [ mu ]
-        pixel_coords += [ pixel_coords_k ]
+            disp_pixs_input_k += [ mu ]
+                
 
         # Compute the linear mapping from pixel
         # coordinates to wavelength scale:
-        wav = np.array( fiducial_lines )
-        pix = np.array( pixel_coords_k )
-        offset = np.ones( len( pix ) )
-        basis = np.column_stack( [ offset, pix ] )
-        wav_linfit_coeffs += [ np.linalg.lstsq( basis, wav )[0] ]
+        wav_fiducial = np.array( fiducial_lines )
+        pix_measured = np.array( disp_pixs_input_k )
+        offset = np.ones( len( pix_measured ) )
+        pix_poly_terms = []
+        for i in range( poly_order ):
+            pix_poly_terms += [ pix_measured**( i+1 ) ]
+        pix_poly_terms = np.column_stack( pix_poly_terms )
+        basis = np.column_stack( [ offset, pix_poly_terms ] )
+        wavsol_coeffs_k = np.linalg.lstsq( basis, wav_fiducial )[0]
+        wav_fits_output_k = np.dot( basis, wavsol_coeffs_k )
+        residuals = wav_fiducial-wav_fits_output_k
+        print '  WAV --> ', wav_fiducial
+        print '  PIX --> ', pix_measured
+        print '  Max wavelength discrepancy = {0}'.format( residuals.max() )
+        stellar.wavsol['disp_pixs_input'] += [ np.array( disp_pixs_input_k ) ]
+        stellar.wavsol['wav_fits_output'] += [ np.array( wav_fits_output_k ) ]
+        stellar.wavsol['wavsol_coeffs'] += [ np.array( wavsol_coeffs_k ) ]
 
+    
     # Now go through all the spectra that have already been generated
     # and add a column to the fits table containing the wavelengths:
-    print '\nSuccessfully calibrated the wavelength scale'
+    print '\nSuccessfully calibrated the wavelength scale.'
     if stellar.science_spectra_lists==None:
         print '\nNo science_spectra_lists attribute provided -'
         print 'spectra not updated'
@@ -946,26 +960,29 @@ def calibrate_wavelength_scale( stellar, make_plots=False ):
             science_spectra_list_k = os.path.join( stellar.adir, stellar.science_spectra_lists[k] )
             spectra_files += [ np.loadtxt( science_spectra_list_k, dtype=str ) ]
             for j in range( nimages ):
-                spectra_file_jk = os.path.join( stellar.adir, spectra_files[k][j] )
-                spectrum_hdu = fitsio.FITS( spectra_file_jk, 'rw' )
+                spectra_file_kj = os.path.join( stellar.adir, spectra_files[k][j] )
+                spectrum_hdu = fitsio.FITS( spectra_file_kj, 'rw' )
                 disp_pixs = spectrum_hdu[1]['disp_pixs'].read()
                 offset = np.ones( len( disp_pixs ) )
-                basis = np.column_stack( [ offset, disp_pixs ] )
-                wav = np.dot( basis, wav_linfit_coeffs[k] )
+                pix_poly_terms = []
+                for i in range( poly_order ):
+                    pix_poly_terms += [ disp_pixs**( i+1 ) ]
+                pix_poly_terms = np.column_stack( [ pix_poly_terms ] )
+                basis = np.column_stack( [ offset, pix_poly_terms ] )
+                wav = np.dot( basis, stellar.wavsol['wavsol_coeffs'][k] )
                 try:
                     spectrum_hdu[1].insert_column( 'wav', wav )
                 except:
                     spectrum_hdu[1].write_column( 'wav', wav )
                 spectrum_hdu.close()
-
         if make_plots==True:
             ofolder_ext = 'spectra_pngs'
             ofolder = os.path.join( stellar.adir, ofolder_ext )
             if os.path.isdir( ofolder )!=True:
                 os.makedirs( ofolder )
+            print 'Making plots and saving as png files...'
             for j in range( nimages ):
-                print 'Making plot and saving as png for image {0} of {1}'\
-                      .format( j+1, nimages )
+                print ' ... image {0} of {1}'.format( j+1, nimages )
                 plt.figure()
                 for k in range( stellar.nstars ):
                     spectrum_file_kj = os.path.join( stellar.adir, spectra_files[k][j] )
