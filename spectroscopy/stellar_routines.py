@@ -898,13 +898,16 @@ def calibrate_wavelength_scale( stellar, poly_order=1, make_plots=False ):
             disp_pixbounds = stellar.wcal_kws['disp_pixbounds'][k][j]
             dl = disp_pixbounds[0]
             du = disp_pixbounds[1]
+            disp_pixs_kj = np.arange( dl, du+1, 1 )
             cl = crossdisp_pixbounds[0]
             cu = crossdisp_pixbounds[1]
             if stellar.disp_axis==0:
                 disp_prof = np.sum( marc[:,cl:cu+1][dl:du+1,:], axis=1 )
             else:
                 disp_prof = np.sum( marc[cl:cu+1,:][:,dl:du+1], axis=0 )            
-            disp_pixs_kj = np.arange( dl, du+1, 1 )
+            # Ensure the dispersion profile is in reasonable units:
+            disp_prof -= np.median( disp_prof )
+            disp_prof /= disp_prof.max()
             
             A0 = disp_prof.min()
             B0 = 0.
