@@ -54,8 +54,8 @@ class stellar():
         stellar_routines.extract_spectra( self )
         return None
 
-    def calibrate_wavelength_scale( self, make_plots=False ):
+    def calibrate_wavelength_scale( self, poly_order=1, make_plots=False ):
         """
         """
-        stellar_routines.calibrate_wavelength_scale( self, make_plots=make_plots )
+        stellar_routines.calibrate_wavelength_scale( self, poly_order=poly_order, make_plots=make_plots )
         return None
