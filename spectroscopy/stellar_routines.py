@@ -417,7 +417,7 @@ def fit_traces( stellar, make_plots=False ):
 
                 # Fit the cross-dispersion profile with a
                 # Gaussian using least squares:
-                A0 = crossdisp_prof[0]
+                A0 = crossdisp_prof.min()
                 B0 = 0.
                 C0 = np.max( crossdisp_prof ) - A0
                 crossdisp_prof_downshift = crossdisp_prof - A0 - 0.1*C0
@@ -866,7 +866,7 @@ def extract_spectra( stellar ):
 def calibrate_wavelength_scale( stellar, poly_order=1, make_plots=False ):
     """
     Use the pre-determined dispersion pixel coordinates of the fiducial
-    lines from the master arc frame to fit a linear mapping from the
+    lines from the master arc frame to fit a polynomial mapping from the
     dispersion axis to the wavelength scale for each star.
     """
 
@@ -940,7 +940,7 @@ def calibrate_wavelength_scale( stellar, poly_order=1, make_plots=False ):
         residuals = wav_fiducial-wav_fits_output_k
         print '  WAV --> ', wav_fiducial
         print '  PIX --> ', pix_measured
-        print '  Max wavelength discrepancy = {0}'.format( residuals.max() )
+        print '  Max wavelength discrepancy = {0}'.format( np.abs( residuals ).max() )
         stellar.wavsol['disp_pixs_input'] += [ np.array( disp_pixs_input_k ) ]
         stellar.wavsol['wav_fits_output'] += [ np.array( wav_fits_output_k ) ]
         stellar.wavsol['wavsol_coeffs'] += [ np.array( wavsol_coeffs_k ) ]
