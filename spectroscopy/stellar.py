@@ -33,6 +33,9 @@ class stellar():
         self.sky_inner_radius = None
         self.sky_band_width = None
         self.sky_method = 'linear_interpolation'
+
+        # Record of frames that have been flagged as good or bad:
+        self.goodbad = None
         
         return None
 

@@ -235,6 +235,9 @@ def fit_traces( stellar, make_plots=False ):
     # Read in the science images:
     science_images = np.loadtxt( stellar.science_images_list, dtype=str )
     nimages = len( science_images )
+    goodbad = stellar.goodbad
+    if goodbad==None:
+        goodbad = np.ones( nimages )
 
     # Open files that will store a list of
     # the trace file names:
@@ -255,7 +258,11 @@ def fit_traces( stellar, make_plots=False ):
     for j in range( nimages ):
         t1=time.time()
         # Load current image and measure dimensions:
-        print '\nFitting traces in image {0} of {1}'.format( j+1, nimages )
+        if goodbad[j]==1:
+            print '\nFitting traces in image {0} of {1}'.format( j+1, nimages )
+        else:
+            print '\nImage {0} of {1} flagged as bad - skipping'.format( j+1, nimages )
+            continue
         image_filename = science_images[j]
         image_root = image_filename[:image_filename.rfind('.')]
         image_filepath = os.path.join( stellar.ddir, image_filename )
@@ -629,6 +636,9 @@ def extract_spectra( stellar ):
     science_images_list = os.path.join( stellar.adir, stellar.science_images_list )
     science_images = np.loadtxt( science_images_list, dtype=str )
     nimages = len( science_images )
+    goodbad = stellar.goodbad
+    if goodbad==None:
+        goodbad = np.ones( nimages )
 
     if stellar.gains==None:
         stellar.gains = np.ones( nimages )
@@ -643,7 +653,11 @@ def extract_spectra( stellar ):
     for j in range( nimages ):
 
         # Load in the image and header:
-        print '\nExtracting spectra from image {0} of {1}'.format( j+1, nimages )
+        if goodbad[j]==1:
+            print '\nExtracting spectra from image {0} of {1}'.format( j+1, nimages )
+        else:
+            print '\nImage {0} of {1} flagged as bad - skipping'.format( j+1, nimages )
+            continue
         image_filename = science_images[j]
         image_root = image_filename[:image_filename.rfind('.')]
         image_filepath = os.path.join( stellar.ddir, image_filename )
@@ -951,7 +965,6 @@ def calibrate_wavelength_scale( stellar, poly_order=1, make_plots=False ):
                                                             disp_prof ) )[0]
             A, B, C, sig, mu = pars_optimised
             disp_pixs_input_k += [ mu ]
-                
 
         # Compute the linear mapping from pixel
         # coordinates to wavelength scale:
@@ -972,8 +985,7 @@ def calibrate_wavelength_scale( stellar, poly_order=1, make_plots=False ):
         stellar.wavsol['disp_pixs_input'] += [ np.array( disp_pixs_input_k ) ]
         stellar.wavsol['wav_fits_output'] += [ np.array( wav_fits_output_k ) ]
         stellar.wavsol['wavsol_coeffs'] += [ np.array( wavsol_coeffs_k ) ]
-
-    
+        
     # Now go through all the spectra that have already been generated
     # and add a column to the fits table containing the wavelengths:
     print '\nSuccessfully calibrated the wavelength scale.'
@@ -984,13 +996,18 @@ def calibrate_wavelength_scale( stellar, poly_order=1, make_plots=False ):
         print 'Adding wavelength solutions to the existing spectrum files...'
         science_images_list = os.path.join( stellar.adir, stellar.science_images_list )
         science_image_files = np.loadtxt( science_images_list, dtype=str )
-        nimages = len( science_image_files )
+
         spectra_files = []
+        nspectra = []
         for k in range( stellar.nstars ):
             print ' ... star{0}'.format( k )
-            science_spectra_list_k = os.path.join( stellar.adir, stellar.science_spectra_lists[k] )
-            spectra_files += [ np.loadtxt( science_spectra_list_k, dtype=str ) ]
-            for j in range( nimages ):
+            science_spectra_list_filepath_k = os.path.join( stellar.adir, \
+                                                            stellar.science_spectra_lists[k] )
+            science_spectra_list_k = np.loadtxt( science_spectra_list_filepath_k, dtype=str )
+            spectra_files += [ science_spectra_list_k ]
+            nspectra_k = len( science_spectra_list_k )
+            nspectra += [ nspectra_k ]
+            for j in range( nspectra_k ):
                 spectra_file_kj = os.path.join( stellar.adir, spectra_files[k][j] )
                 spectrum_hdu = fitsio.FITS( spectra_file_kj, 'rw' )
                 disp_pixs = spectrum_hdu[1]['disp_pixs'].read()
@@ -998,7 +1015,7 @@ def calibrate_wavelength_scale( stellar, poly_order=1, make_plots=False ):
                 pix_poly_terms = []
                 for i in range( poly_order ):
                     pix_poly_terms += [ disp_pixs**( i+1 ) ]
-                pix_poly_terms = np.column_stack( [ pix_poly_terms ] )
+                pix_poly_terms = np.column_stack( pix_poly_terms )
                 basis = np.column_stack( [ offset, pix_poly_terms ] )
                 wav = np.dot( basis, stellar.wavsol['wavsol_coeffs'][k] )
                 try:
@@ -1012,8 +1029,13 @@ def calibrate_wavelength_scale( stellar, poly_order=1, make_plots=False ):
             if os.path.isdir( ofolder )!=True:
                 os.makedirs( ofolder )
             print 'Making plots and saving as png files...'
-            for j in range( nimages ):
-                print ' ... image {0} of {1}'.format( j+1, nimages )
+            nspectra0 = nspectra[0]
+            for k in range( 1, stellar.nstars ):
+                if nspectra[k]!=nspectra0:
+                    print '\nWARNING: Number of spectra not the same for each star!'
+                    print '(proceeding with plotting anyway)\n'
+            for j in range( nspectra0 ):
+                print ' ... spectra {0} of {1}'.format( j+1, nspectra[0] )
                 plt.figure()
                 for k in range( stellar.nstars ):
                     spectrum_file_kj = os.path.join( stellar.adir, spectra_files[k][j] )
@@ -1033,7 +1055,9 @@ def calibrate_wavelength_scale( stellar, poly_order=1, make_plots=False ):
                 plt.close()
         print 'Done.'
     plt.ion()
+    
     return None
+
     
 def gauss_resids( pars, x, y ):
     """
