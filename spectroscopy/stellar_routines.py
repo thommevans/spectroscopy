@@ -48,7 +48,6 @@ def identify_badpixels( stellar ):
     
     # Read in the science images:
     science_images = np.loadtxt( stellar.science_images_list, dtype=str )
-    
     nimages = len( science_images )
     sciences = []
     badpix_statics = []
@@ -71,6 +70,10 @@ def identify_badpixels( stellar ):
         print ' ... iteration {0} of {1}'.format( i+1, niterations )
 
         for j in range( nimages ):
+
+            if j%20==0:
+                print '... up to image {0} of {1} (iteration {2} of {3})'\
+                      .format( j+1, nimages, i+1, niterations )
 
             # Load current image and measure dimensions:
             image_filename = science_images[j]
@@ -143,138 +146,50 @@ def identify_badpixels( stellar ):
                 sig_sub = np.std( subslider[:,:,ixs_use], axis=2 )
                 delsigmas_sub = abs( ( subdarray - med_sub )/sig_sub )
                 ixs_bad = ( delsigmas_sub>nsigma_thresh )
-                if ixs_bad.max()==True:
-                    if i<niterations-1:
+                frac_bad = ixs_bad.sum()/float( ixs_bad.size )
+                if ( frac_bad>1e-3 )*( i<niterations-1 ):
                         untainted_frames[j] = 0
-                        print 'Flagging frame {0} as containing bad pixels'.format( image_filename )
-                    else:
-                        if stellar.disp_axis==0:
-                            badpix_j[dl:du+1,cl:cu+1][ixs_bad] = 1
-                        else:
-                            badpix_j[cl:cu+1,dl:du+1][ixs_bad] = 1
+                        print 'Flagging frame {0} as containing >1e-3 bad pixel fraction for star{1}'\
+                              .format( image_filename, k )
+                ## ###
+                ## plt.ion()
+                ## plt.figure()
+                ## plt.title('bad pixels')
+                ## plt.imshow(ixs_bad,interpolation='nearest',origin='lower',aspect='auto')
+                ## plt.colorbar()
+                ## plt.figure()
+                ## plt.title('delsigmas')
+                ## plt.imshow(delsigmas_sub,interpolation='nearest',origin='lower',aspect='auto')
+                ## plt.colorbar()
+                ## plt.figure()
+                ## plt.title('current')
+                ## plt.imshow(subdarray,interpolation='nearest',origin='lower',aspect='auto')
+                ## plt.colorbar()
+                ## plt.figure()
+                ## plt.title('med')
+                ## plt.imshow(med_sub,interpolation='nearest',origin='lower',aspect='auto')
+                ## plt.colorbar()
+                ## plt.figure()
+                ## plt.title('sigmas')
+                ## plt.imshow(sig_sub,interpolation='nearest',origin='lower',aspect='auto')
+                ## plt.colorbar()
+                ## pdb.set_trace()
+                ## ###
 
-            if i==niterations-1:
-                if badpix_static!=None:
-                    badpix_j *= badpix_static
-                if os.path.isfile( image_filepath ):
-                    os.remove( image_filepath )
-                image_hdu = fitsio.FITS( image_filepath, 'rw' )
-                image_hdu.write( None, header=header0 )
-                image_hdu.write( current_data, header=header1 )
-                image_hdu.write( badpix_j )
-                image_hdu.close()
-                if i==niterations-1:
-                    nbad = badpix_j.sum()
-                    if nbad>0:
-                        print 'Flagged {0} bad pixels in image {1}'\
-                              .format( nbad, image_filename )
-
-    return None
-
-def identify_badpixels_WORKING( stellar ):
-    
-    # Read in the science images:
-    science_images = np.loadtxt( stellar.science_images_list, dtype=str )
-    #science_images = science_images[533:]
-    
-    nimages = len( science_images )
-    sciences = []
-    badpix_statics = []
-
-    if ( stellar.badpix_static!=None )*( stellar.badpix_static!='' ):
-        badpix_path = os.path.join( stellar.adir, stellar.badpix_static )
-        badpix_static_hdu = fitsio.FITS( badpix_path )
-        badpix_static = badpix_static_hdu[2].read_image()
-        badpix_static_hdu.close()
-    else:
-        badpix_static = None
-
-    # Do niterations passes of bad pixel flagging:
-    nslide = 20
-    nsigma_thresh = 7
-    niterations = 2
-    print '\nBad pixel flagging:'
-    untainted_frames = np.ones( nimages )
-    for i in range( niterations ):
-        print ' ... iteration {0} of {1}'.format( i+1, niterations )
-
-        for j in range( nslide, nimages-nslide ):
-
-            # Load current image and measure dimensions:
-            image_filename = science_images[j]
-            image_root = image_filename[:image_filename.rfind('.')]
-            image_filepath = os.path.join( stellar.ddir, image_filename )
-            image_hdu_current = fitsio.FITS( image_filepath, 'rw' )
-            header0 = image_hdu_current[0].read_header()
-            header1 = image_hdu_current[1].read_header()
-            current_data = image_hdu_current[1].read_image()
-            image_hdu_current.close()
-
-            print '\n', j+1, nimages
-            print image_filename
-
-            ixs_before = j - np.arange( nslide ) - 1
-            ixs_after = j + np.arange( nslide ) + 1
-            ixs_slide = np.concatenate( [ ixs_before, ixs_after ] )
-
-            # If this is the first frame we need to construct
-            # the slider frames to compare against:
-            if j==nslide:
-                dims = np.shape( current_data )
-                disp_pixrange = np.arange( dims[stellar.disp_axis] )
-                crossdisp_pixrange = np.arange( dims[stellar.crossdisp_axis] )
-                slider_data = []
-                for jj in ixs_slide:
-                    image_filename_jj = science_images[jj]
-                    image_root_jj = image_filename_jj[:image_filename_jj.rfind('.')]
-                    image_filepath_jj = os.path.join( stellar.ddir, image_filename_jj )
-                    image_hdu_jj = fitsio.FITS( image_filepath_jj )
-                    slider_data += [ image_hdu_jj[1].read_image() ]
-                    image_hdu_jj.close()
-                slider_data = np.dstack( slider_data )
-            else:
-                # Drop the first frame of the slider:
-                slider_data = slider_data[:,:,1:]
-                # Add a new slide to the leading edge:
-                image_filename_lead = science_images[ixs_slide[-1]]
-                image_root_lead = image_filename_lead[:image_filename_lead.rfind('.')]
-                image_filepath_lead = os.path.join( stellar.ddir, image_filename_lead )
-                image_hdu_lead = fitsio.FITS( image_filepath_lead )
-                lead_data = image_hdu_lead[1].read_image()
-                image_hdu_lead.close()
-                slider_data = np.dstack( [ slider_data, lead_data ] )
-            # Determine which slider frames are untainted:
-            ixs_use = np.arange( 2*nslide )[ untainted_frames[ixs_slide]==1 ]
-            # Loop over each star on the image:
-            for k in range( stellar.nstars ):
-                dl = stellar.disp_bounds[k][0]
-                du = stellar.disp_bounds[k][1]
-                cl = stellar.crossdisp_bounds[k][0]
-                cu = stellar.crossdisp_bounds[k][1]
-                crossdisp_ixs = ( crossdisp_pixrange>=cl )*( crossdisp_pixrange<=cu )
-                disp_ixs = ( disp_pixrange>=dl )*( disp_pixrange<=du )
                 if stellar.disp_axis==0:
-                    subdarray = current_data[disp_ixs,:][:,crossdisp_ixs]
-                    subslider = slider_data[disp_ixs,:,:][:,crossdisp_ixs,:]
+                    badpix_j[dl:du+1,cl:cu+1][ixs_bad] = 1
                 else:
-                    subdarray = current_data[crossdisp_ixs,:][:,disp_ixs]
-                    subslider = slider_data[crossdisp_ixs,:,:][:,disp_ixs,:]
-                med_sub = np.median( subslider[:,:,ixs_use], axis=2 )
-                sig_sub = np.std( subslider[:,:,ixs_use], axis=2 )
-                delsigmas_sub = abs( ( subdarray - med_sub )/sig_sub )
-            # If this is the last iteration, generate
-            # a bad pixel map for the current image:
-            if i<niterations-1:
-                if delsigmas_sub.max()>nsigma_thresh:
-                    untainted_frames[j] = 0
-            else:
-                med = np.median( slider[:,:,ixs_use], axis=2 )
-                sig = np.std( slider[:,:,ixs_use], axis=2 )
-                delsigmas = abs( ( current_data - med )/sig )
+                    badpix_j[cl:cu+1,dl:du+1][ixs_bad] = 1
+                    
+            if i==niterations-1:
+                nbad_transient = badpix_j.sum()
                 if badpix_static!=None:
-                    badpix_j = ( delsigmas>nsigma_thresh )*badpix_static
-                else:
-                    badpix_j = ( delsigmas>nsigma_thresh )
+                    badpix_j += badpix_static
+
+                # If bad pixels have been flagged more than once,
+                # set their value to 1 in the bad pixel map:
+                ixs = ( badpix_j!=0 )
+                badpix_j[ixs] = 1
                 if os.path.isfile( image_filepath ):
                     os.remove( image_filepath )
                 image_hdu = fitsio.FITS( image_filepath, 'rw' )
@@ -283,11 +198,13 @@ def identify_badpixels_WORKING( stellar ):
                 image_hdu.write( badpix_j )
                 image_hdu.close()
                 if i==niterations-1:
-                    nbad = current_mask.sum()
-                    print 'Flagged {0} bad pixels in image {1}'\
-                          .format( nbad, image_filename )
+                    nbad_total = badpix_j.sum()
+                    if nbad_transient>0:
+                        print 'Flagged {0} transient bad pixels in image {1}'\
+                              .format( nbad_transient, image_filename )
 
     return None
+
 
 
 def fit_traces( stellar, make_plots=False ):
@@ -348,9 +265,14 @@ def fit_traces( stellar, make_plots=False ):
         darray = np.ma.masked_array( darray, mask=badpix )
         image_hdu.close()
 
+        if i==110:
+            print image_filepath
+            pdb.set_trace()
+        
         arr_dims = np.shape( darray )
-        disp_pixrange = np.arange( arr_dims[stellar.disp_axis] )
-        crossdisp_pixrange = np.arange( arr_dims[stellar.crossdisp_axis] )
+        eps = 1e-8
+        disp_pixrange = np.arange( arr_dims[stellar.disp_axis] + eps )
+        crossdisp_pixrange = np.arange( arr_dims[stellar.crossdisp_axis] + eps )
 
         # These lists will be used to store arrays for
         # plotting the cross-dispersion profiles:
@@ -387,6 +309,8 @@ def fit_traces( stellar, make_plots=False ):
             # Generate bins along the dispersion axis:
             ledges = np.arange( disp_pixs[0], disp_pixs[-1], binw_disp )
             bincents_disp = ledges + 0.5*binw_disp
+            ixs = ( bincents_disp>disp_pixs.min() )*( bincents_disp<disp_pixs.max() )
+            bincents_disp = bincents_disp[ixs]
             nbins_disp = len( bincents_disp )
 
             # Extract the raw stellar spectrum:
@@ -402,28 +326,53 @@ def fit_traces( stellar, make_plots=False ):
             y_k = []
             g_k = []
             s_k = []
-            trace_interps = np.zeros( nbins_disp )
+            bincents_disp_good = []
+            trace_interps = [] #np.zeros( nbins_disp )
             for i in range( nbins_disp ):
 
                 # Extract the cross-dispersion profile form 
                 # the current bin along the dispersion axis:
                 dl_i = ledges[i]
                 du_i = dl_i + binw_disp
-
                 if stellar.disp_axis==0:
-                    crossdisp_prof = np.mean( darray[dl_i:du_i,cl:cu+1], axis=0 )
+                    binwindow = darray[dl_i:du_i,cl:cu+1]
                 else:
-                    crossdisp_prof = np.mean( darray[cl:cu+1,dl_i:du_i], axis=1 )
+                    binwindow = darray[cl:cu+1,dl_i:du_i]
 
+                nbad = binwindow.mask.sum()
+                ntot = binwindow.mask.size
+                fracbad = float( nbad )/ntot
+                if fracbad>0.2:
+                    print 'Too many bad pixels for bin - skipping'
+                    continue
+                else:
+
+                    if stellar.disp_axis==0:
+                        sky_rough_l = np.median( darray[dl_i:du_i,cl:cl+2] )
+                        sky_rough_u = np.median( darray[dl_i:du_i,cu-2:cu] )
+                        sky_slope = ( sky_rough_u - sky_rough_l )/( cu-cl+1 )
+                        sky_rough = sky_slope*np.arange( cu-cl+1 ) + sky_rough_l
+                        raw_flux = np.median( darray[dl_i:du_i,cl:cu+1], axis=0 )
+                        crossdisp_prof = raw_flux - sky_rough
+                    else:
+                        sky_rough_l = np.median( darray[cl:cl+2,dl_i:du_i].flatten() )
+                        sky_rough_u = np.median( darray[cu-2:cu,dl_i:du_i].flatten() )
+                        sky_slope = ( sky_rough_u - sky_rough_l )/( cu-cl+1 )
+                        sky_rough = sky_slope*np.arange( cu-cl+1 ) + sky_rough_l
+                        raw_flux = np.median( darray[cl:cu+1,dl_i:du_i], axis=1 )
+                        crossdisp_prof = raw_flux - sky_rough
                 # Fit the cross-dispersion profile with a
                 # Gaussian using least squares:
                 A0 = crossdisp_prof.min()
                 B0 = 0.
                 C0 = np.max( crossdisp_prof ) - A0
-                crossdisp_prof_downshift = crossdisp_prof - A0 - 0.1*C0
-                ixs = ( crossdisp_prof_downshift>0 )
-                pixs = crossdisp_pixs[ixs]
-                sig0 = 0.3*( pixs.max() - pixs.min() )
+                crossdisp_prof_downshift = crossdisp_prof - A0 - 0.8*C0
+                ixs = ( crossdisp_prof_downshift.data>0 )
+                if ixs.sum()>2:
+                    pixs = crossdisp_pixs[ixs]
+                    sig0 = 0.3*( pixs.max() - pixs.min() )
+                else:
+                    sig0 = 0.1*len( crossdisp_pixs )
                 ix = np.argmax( crossdisp_prof )
                 crossdisp_coord0 = crossdisp_pixs[ix]
                 pars0 = np.array( [ A0, B0, C0, sig0, crossdisp_coord0 ] )
@@ -431,47 +380,94 @@ def fit_traces( stellar, make_plots=False ):
                                                          pars0, \
                                                          args=( crossdisp_pixs, \
                                                                 crossdisp_prof ) )[0]
-                A, B, C, sig, trace_interps[i] = pars_optimised
+                A, B, C, sig, trace_interps_i = pars_optimised
+                bincents_disp_good += [ bincents_disp[i] ]
+                trace_interps += [ trace_interps_i ]
 
                 y_k += [ crossdisp_prof ]
                 g_k += [ gauss_profile( crossdisp_pixs, pars_optimised ) ]
                 s_k += [ abs( sig ) ]
 
+                
             fwhms[j,k] = 2.355*np.median( s_k )
             
             # Now that we've fit for the centres of each bin along the
             # dispersion axis, we can interpolate these to a spectral
             # trace evaluated at each pixel along the dispersion axis:
+            bincents_disp_good = np.array( bincents_disp_good )
+            trace_interps = np.array( trace_interps )
             trace = np.zeros( npix_disp )
+
             if stellar.tracefit_kwargs['method']=='linear_interpolation':
 
                 # Create the interpolating function:
-                interpf = scipy.interpolate.interp1d( bincents_disp, \
+                interpf = scipy.interpolate.interp1d( bincents_disp_good, \
                                                       trace_interps, \
                                                       kind='linear' )
 
                 # Interpolate between the bin centers:
-                ixs = ( ( disp_pixs>=bincents_disp.min() )\
-                        *( disp_pixs<=bincents_disp.max() ) )
+                ixs = ( ( disp_pixs>=bincents_disp_good.min() )\
+                        *( disp_pixs<=bincents_disp_good.max() ) )
                 trace[ixs] = interpf( disp_pixs[ixs] )
 
                 # Linearly extrapolate at the edges:
-                ixsl = ( disp_pixs<bincents_disp.min() )
-                ixsu = ( disp_pixs>bincents_disp.max() )
+                # NOTE: I loop over each element in the series here to avoid a
+                # bizarre bug with numpy. In theory, it should be possible to
+                # do this bit simply using: 
+                #ixsl = disp_pixs<bincents_disp_good.min()
+                #ixsu = disp_pixs>bincents_disp_good.max()
+                # I have absolutely no idea why numpy seems to be making such a
+                # trivial error, but hopefully it gets fixed in the future. It's
+                # a pretty big concern, actually, because it could introduce subtle
+                # problems to other parts of code. Anyway, the problem seems to
+                # only occur for the macports installed version:
+                #       py27-numpy @1.8.0_2+atlas+gcc45
+                # whereas I don't get the same odd behaviour for v1.7 for instance.
+                # So in the future it should be possible to revert the following
+                # lines to the simpler version above, presumably.
+                ixsl = []
+                for w in range( len( disp_pixs ) ):
+                    if disp_pixs[w]<bincents_disp_good.min():
+                        ixsl += [ w ]
+                ixsl = np.array( ixsl )
+                ixsu = []
+                for w in range( len( disp_pixs ) ):
+                    if disp_pixs[w]>bincents_disp_good.max():
+                        ixsu += [ w ]
+                ixsu = np.array( ixsu )
+                
                 trace[ixsl] = linear_extrapolation( disp_pixs[ixsl], \
-                                                    bincents_disp[0:2], \
+                                                    bincents_disp_good[0:2], \
                                                     trace_interps[0:2] )
                 trace[ixsu] = linear_extrapolation( disp_pixs[ixsu], \
-                                                    bincents_disp[-2:], \
+                                                    bincents_disp_good[-2:], \
                                                     trace_interps[-2:] )
             else:
                 pdb.set_trace() # haven't implemented any other methods yet
             y += [ y_k ]
             g += [ g_k ]
             s += [ s_k ]
-            ci += [ bincents_disp ]
+            ci += [ bincents_disp_good ]
             ti += [ trace_interps ]
             t += [ trace ]
+
+            if 0*(j>50):
+                plt.figure()
+                plt.subplot(211)
+                plt.plot(crossdisp_pixs,crossdisp_prof)
+                plt.axvline(crossdisp_coord0,ls='-')
+                plt.axvline(crossdisp_coord0-sig0,ls='--')
+                plt.axvline(crossdisp_coord0+sig0,ls='--')
+                plt.subplot(212)                    
+                plt.plot(crossdisp_pixs,crossdisp_prof)
+                plt.axvline(trace_interps[i],ls='-')
+                plt.axvline(trace_interps[i]-sig,ls='--')
+                plt.axvline(trace_interps[i]+sig,ls='--')
+                plt.suptitle( 'Image {0}, star {1}, bin {2}'.format( j, k, i ))
+                pdb.set_trace()
+                plt.close('all')
+
+
 
             # Save the trace centers for the current image to an output file:
             ofolder_ext = 'trace_files/star{0}'.format( k )
@@ -718,7 +714,7 @@ def extract_spectra( stellar ):
                     crossdisp_row = subarray[i,:]
                 else:
                     crossdisp_central_pix = trarray[i,1]
-                    crossdisp_row = subarray[i,:]
+                    crossdisp_row = subarray[:,i]
 
                 # Determine the pixels that are fully
                 # contained within the spectral aperture:
@@ -826,16 +822,6 @@ def extract_spectra( stellar ):
                 nappixs[i] = npix_full + nfracpix_u + nfracpix_l
                 skyppix[i] = sky/float( nappixs[i] )
 
-                if 0*( i%20==0 ):
-                    plt.ion()
-                    plt.close('all')
-                    plt.figure()
-                    plt.plot( crossdisp_pixs, crossdisp_row )
-                    plt.axvline( crossdisp_central_pix, ls='-' )
-                    plt.axvline( crossdisp_central_pix+stellar.spectral_ap_radius, ls='--' )
-                    plt.axvline( crossdisp_central_pix-stellar.spectral_ap_radius, ls='--' )
-                    pdb.set_trace()
-
             # Save the spectra for the current star on 
             # the current image in a fits table:
             data = np.zeros( npix_disp, dtype=[ ( 'disp_pixs', np.int64 ), \
@@ -870,7 +856,7 @@ def calibrate_wavelength_scale( stellar, poly_order=1, make_plots=False ):
     dispersion axis to the wavelength scale for each star.
     """
 
-    #plt.ioff()
+    plt.ioff()
     
     marc_hdu = fitsio.FITS( stellar.wcal_kws['marc_file'], 'r' )
     marc = marc_hdu[1].read_image()
