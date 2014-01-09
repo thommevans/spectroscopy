@@ -265,10 +265,6 @@ def fit_traces( stellar, make_plots=False ):
         darray = np.ma.masked_array( darray, mask=badpix )
         image_hdu.close()
 
-        if i==110:
-            print image_filepath
-            pdb.set_trace()
-        
         arr_dims = np.shape( darray )
         eps = 1e-8
         disp_pixrange = np.arange( arr_dims[stellar.disp_axis] + eps )
@@ -341,8 +337,8 @@ def fit_traces( stellar, make_plots=False ):
 
                 nbad = binwindow.mask.sum()
                 ntot = binwindow.mask.size
-                fracbad = float( nbad )/ntot
-                if fracbad>0.2:
+                frac_bad = float( nbad )/ntot
+                if frac_bad>0.2:
                     print 'Too many bad pixels for bin - skipping'
                     continue
                 else:
@@ -388,6 +384,10 @@ def fit_traces( stellar, make_plots=False ):
                 g_k += [ gauss_profile( crossdisp_pixs, pars_optimised ) ]
                 s_k += [ abs( sig ) ]
 
+            ninterp = len( trace_interps )
+            if ninterp<2:
+                print 'Could not extract trace - skipping frame'
+                continue
                 
             fwhms[j,k] = 2.355*np.median( s_k )
             
@@ -639,6 +639,7 @@ def extract_spectra( stellar ):
     
     # Loop over each image, and extract the spectrum
     # for each star on each image:
+    eps = 1e-10
     for j in range( nimages ):
 
         # Load in the image and header:
@@ -667,8 +668,47 @@ def extract_spectra( stellar ):
         image_hdu.close()
         jdobs = stellar.jds[j] + 0.5*stellar.exptime_secs[j]/60./60./24.
 
-        # Loop over each star:
+        subarrays = []
+        crossdisp_ixs = []
+        disp_ixs = []
+        discard_frame = False
         for k in range( stellar.nstars ):
+            # Identify the dispersion and cross-dispersion
+            # pixels of the spectrum data:
+            cl = stellar.crossdisp_bounds[k][0]
+            cu = stellar.crossdisp_bounds[k][1]
+            crossdisp_ixs_k = ( crossdisp_pixrange>=cl )*( crossdisp_pixrange<=cu )
+            dl = stellar.disp_bounds[k][0]
+            du = stellar.disp_bounds[k][1]
+            disp_ixs_k = ( disp_pixrange>=dl )*( disp_pixrange<=du )
+            # Cut out a subarray containing the spectrum data:
+            if stellar.disp_axis==0:
+                subarray_k = darray[disp_ixs_k,:][:,crossdisp_ixs_k]
+            else:
+                subarray_k = darray[:,disp_ixs_k][crossdisp_ixs_k,:]
+            nbad = subarray_k.mask.sum()
+            ntot = subarray_k.mask.size
+            frac_bad = float( nbad )/ntot
+            if frac_bad>0.2:
+                discard_frame = True
+                break
+            else:
+                subarrays += [ subarray_k ]
+                crossdisp_ixs += [ crossdisp_ixs_k ]
+                disp_ixs += [ disp_ixs_k ]            
+                
+        # If any of the regions containing the stellar spectra
+        # had anomalously high levels of bad pixels, just skip
+        # the current frame completely:
+        if discard_frame==True:
+            print 'Too many bad pixels in frame - skipping'
+            continue
+
+        # Otherwise, proceed to loop over each star:
+        for k in range( stellar.nstars ):
+            crossdisp_pixs = crossdisp_pixrange[crossdisp_ixs[k]]
+            disp_pixs_full = disp_pixrange[disp_ixs[k]]
+            npix_disp_full = len( disp_pixs_full )
 
             # Define filename for the output spectrum of
             # the current star for the current image:
@@ -681,40 +721,32 @@ def extract_spectra( stellar ):
             if os.path.isdir( ofolder )!=True:
                 os.makedirs( ofolder )
             
-            # Identify the dispersion and cross-dispersion
-            # pixels of the spectrum data:
-            cl = stellar.crossdisp_bounds[k][0]
-            cu = stellar.crossdisp_bounds[k][1]
-            crossdisp_ixs = ( crossdisp_pixrange>=cl )*( crossdisp_pixrange<=cu )
-            crossdisp_pixs = crossdisp_pixrange[crossdisp_ixs]
-            dl = stellar.disp_bounds[k][0]
-            du = stellar.disp_bounds[k][1]
-            disp_ixs = ( disp_pixrange>=dl )*( disp_pixrange<=du )
-            disp_pixs = disp_pixrange[disp_ixs]
-            npix_disp = len( disp_pixs )
-
-            # Cut out a subarray containing the spectrum data:
-            if stellar.disp_axis==0:
-                subarray = darray[disp_ixs,:][:,crossdisp_ixs]
-            else:
-                subarray = darray[:,disp_ixs][crossdisp_ixs,:]
-
             # Read in the array containing the trace fit:
             trace_file_path_kj = os.path.join( stellar.adir, trace_files[k][j] )
             trarray = np.loadtxt( trace_file_path_kj )
-            apflux = np.zeros( npix_disp )
-            nappixs = np.zeros( npix_disp )
-            skyppix = np.zeros( npix_disp )
+            apflux = []#np.zeros( npix_disp )
+            nappixs = []#np.zeros( npix_disp )
+            skyppix = []#np.zeros( npix_disp )
+            disp_pixs = []
 
             # Loop over each pixel column along the
             # dispersion axis:
-            for i in range( npix_disp ):
+            for i in range( npix_disp_full ):
                 if stellar.disp_axis==0:
                     crossdisp_central_pix = trarray[i,1]
-                    crossdisp_row = subarray[i,:]
+                    crossdisp_row = subarrays[k][i,:]
                 else:
                     crossdisp_central_pix = trarray[i,1]
-                    crossdisp_row = subarray[:,i]
+                    crossdisp_row = subarrays[k][:,i]
+
+                # Before proceeding, make sure the fitted trace
+                # center is actually located within the defined
+                # cross-dispersion limits; if it's not, it suggests
+                # that something went wrong and this is probably
+                # an unusable frame, so skip it:
+                if ( crossdisp_central_pix<crossdisp_pixs.min() )+\
+                   ( crossdisp_central_pix>crossdisp_pixs.max() ):
+                    continue
 
                 # Determine the pixels that are fully
                 # contained within the spectral aperture:
@@ -738,9 +770,11 @@ def extract_spectra( stellar ):
                              ( crossdisp_central_pix - stellar.spectral_ap_radius )
 
                 # Simple sanity check:
-                if ( npix_full + nfracpix_l + nfracpix_u )>2*stellar.spectral_ap_radius:
+                # NOTE: The eps=1e-10 offsets are to account for the basic numpy bug
+                # that seems to have crept in with the macports v1.8 installation...
+                if ( npix_full + nfracpix_l + nfracpix_u )>2*stellar.spectral_ap_radius+eps:
                     pdb.set_trace() # this shouldn't happen
-                elif ( npix_full + nfracpix_l + nfracpix_u )<2*stellar.spectral_ap_radius:
+                elif ( npix_full + nfracpix_l + nfracpix_u )<2*stellar.spectral_ap_radius-eps:
                     print ' - aperture overflowing cross-dispersion edge for star{0} in {1}'\
                           .format( k, image_filename )
 
@@ -770,8 +804,8 @@ def extract_spectra( stellar ):
 
                 # Account for the possibility that the sky
                 # is outside the cross-dispersion range:
-                lsky_l = max( [ usky_l, crossdisp_pixs.min() ] )
-                lsky_u = max( [ usky_u, crossdisp_pixs.min() ] )
+                lsky_l = max( [ lsky_l, crossdisp_pixs.min() ] )
+                lsky_u = max( [ lsky_u, crossdisp_pixs.min() ] )
                 usky_l = min( [ usky_l, crossdisp_pixs.max() ] )
                 usky_u = min( [ usky_u, crossdisp_pixs.max() ] )
                 if lsky_u>l:
@@ -798,6 +832,7 @@ def extract_spectra( stellar ):
 
                 # Interpolate sky through the spectral aperture:
                 if ( lsky_l==None )*( lsky_u==None )*( usky_l==None )*( usky_u==None ):
+                    print '\n\n\n\n\n BLUURGH'
                     pdb.set_trace() # no valid sky regions
                 elif ( lsky_l==None )*( lsky_u==None ):
                     sky = usky_med*( nfracpix_l + nfracpix_u + npix_full )
@@ -814,16 +849,23 @@ def extract_spectra( stellar ):
                 # Sum of the pixels that are fully and partially 
                 # contained within the spectral aperture, and
                 # subtract the sky contribution:
-                apflux[i] = np.sum( darray_full ) \
+                apflux += [ np.sum( darray_full ) \
                             + darray_fraclower \
                             + darray_fracupper \
-                            - sky
+                            - sky ]
+                nappixs_i = npix_full + nfracpix_u + nfracpix_l
+                nappixs += [ nappixs_i ]
+                skyppix += [ sky/float( nappixs_i ) ]
+                disp_pixs += [ disp_pixs_full[i] ]
 
-                nappixs[i] = npix_full + nfracpix_u + nfracpix_l
-                skyppix[i] = sky/float( nappixs[i] )
+            apflux = np.array( apflux )
+            nappixs = np.array( nappixs )
+            skyppix = np.array( skyppix )
+            disp_pixs = np.array( disp_pixs )
 
             # Save the spectra for the current star on 
             # the current image in a fits table:
+            npix_disp = len( disp_pixs )
             data = np.zeros( npix_disp, dtype=[ ( 'disp_pixs', np.int64 ), \
                                                 ( 'apflux', np.float64 ), \
                                                 ( 'nappixs', np.float64 ), \
@@ -838,7 +880,7 @@ def extract_spectra( stellar ):
             header = { 'IMAGE':image_filename, 'JD-OBS':jdobs }
             fits.write( data, header=header )
             fits.close()
-            print ' ... saved {0}'.format( ospec_ext )
+            print ' ... saved {0}'.format( ospec_filepath )
             science_spectra_ofiles[k].write( '{0}\n'.format( ospec_ext ) )
 
     # Save all the lists of spectra files:
