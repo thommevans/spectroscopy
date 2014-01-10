@@ -10,6 +10,8 @@ class stellar():
         """
         """
 
+        self.star_names = None
+
         # Image location keywords:
         self.ddir = None
         self.adir = None
