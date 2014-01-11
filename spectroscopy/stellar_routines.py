@@ -897,7 +897,8 @@ def extract_spectra( stellar ):
                 if os.path.isfile( ospec_filepath ):
                     os.remove( ospec_filepath )
                 fits = fitsio.FITS( ospec_filepath, 'rw' )
-                header = { 'IMAGE':image_filename, 'JD-OBS':jdobs }
+                trace_filename = os.path.basename( trace_files[k][j] )
+                header = { 'IMAGE':image_filename, 'TRACE':trace_filename, 'JD-OBS':jdobs }
                 fits.write( data, header=header )
                 fits.close()
                 print ' ... saved {0}'.format( ospec_filepath )
