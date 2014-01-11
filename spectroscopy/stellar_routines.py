@@ -483,73 +483,76 @@ def fit_traces( stellar, make_plots=False ):
             science_traces_ofiles[k].write( '{0}\n'.format( ofile_ext ) )
 
         if make_plots==True:
+            try:
+                tracedir = os.path.join( stellar.adir, 'trace_pngs' )
+                if os.path.isdir( tracedir )!=True:
+                    os.makedirs( tracedir )
 
-            tracedir = os.path.join( stellar.adir, 'trace_pngs' )
-            if os.path.isdir( tracedir )!=True:
-                os.makedirs( tracedir )
+                fig = plt.figure( figsize = [ 15, 11 ] )
+                fig.suptitle( image_filename, fontsize=16 )
 
-            fig = plt.figure( figsize = [ 15, 11 ] )
-            fig.suptitle( image_filename, fontsize=16 )
-            
-            buff = 0.05
-            nrows = stellar.nstars
-            axh = ( 1. - nrows*buff )/float( nrows )
-            axw = ( 1. - 4*buff )/3.
-            xlow1 = 1.5*buff
-            xlow2 = xlow1 + axw + buff
-            xlow3 = xlow2 + axw + buff
-            for k in range( stellar.nstars ):
-                row_number = k%nrows + 1
-                ylow = 1. - buff - row_number*( axh + 0.5*buff )
-                if k==0:
-                    axprof = fig.add_axes( [ xlow1, ylow, axw, axh ] )
-                    axtr = fig.add_axes( [ xlow2, ylow, axw, axh ] )
-                    axspec = fig.add_axes( [ xlow3, ylow, axw, axh ] )
-                    axspec0 = axspec
-                    axprof0 = axprof
-                    axtr0 = axtr
-                    axprof.set_title( 'cross-disp profile' )
-                    axtr.set_title( 'trace fit' )
-                    axspec.set_title( 'raw spectrum' )
-                    ymax = np.concatenate( y[k] ).max()
-                    specmax = spectra[k].max()
-                else:
-                    axprof = fig.add_axes( [ xlow1, ylow, axw, axh ], sharey=axprof0 )
-                    axtr = fig.add_axes( [ xlow2, ylow, axw, axh ], sharey=axtr0 )
-                    axspec = fig.add_axes( [ xlow3, ylow, axw, axh ], sharey=axspec0 )
-                axprof.set_ylabel( '{0}'.format( stellar.star_names[k] ) )
-                if k==stellar.nstars-1:
-                    axprof.set_xlabel( 'cross-disp pixel coord' )
-                    axtr.set_xlabel( 'disp pixel coord' )
-                    axspec.set_xlabel( 'disp pixel coord' )
-                # Plot the raw stellar spectrum:
-                axspec.plot( xd[k], spectra[k], '-k', lw=2 )
-                # Plot the cross-dispersion profile:
-                for i in range( len( y[k] ) ):
-                    axprof.plot( xc[k], y[k][i], '-k', lw=2 )
-                    axprof.plot( xc[k], g[k][i], '-g', lw=1 )
-                xlow = max( [ np.median( np.array( ti[k] ) - 15*np.array( s[k] ) ), \
-                              stellar.crossdisp_bounds[k][0] ] )
-                xupp = min( [ np.median( np.array( ti[k] ) + 15*np.array( s[k] ) ), \
-                              stellar.crossdisp_bounds[k][1] ] )
-                axprof.set_xlim( [ xlow, xupp ] )
-                axprof.text( 0.05, 0.85, 'profile stdv = {0:.2f} pix'.format( np.median( s[k] ) ), \
-                             fontsize=8, horizontalalignment='left', transform=axprof.transAxes )
-                # Plot the trace fit:
-                axtr.plot( xd[k], t[k] - np.median( t[k] ), '-r', lw=2 )
-                axtr.plot( ci[k], ti[k] - np.median( t[k] ), 'o', mec='k', mfc='k', ms=7 )
-                axtr.fill_between( xd[k], \
-                                   t[k] - np.median( t[k] ) - np.median( s[k] ), \
-                                   t[k] - np.median( t[k] ) + np.median( s[k] ), \
-                                   color=[0.8,0.8,0.8] )
-            axprof0.set_ylim( [ 0, 1.1*ymax ] )
-            axtr0.set_ylim( [ -10, +10 ] )
-            axspec0.set_ylim( [ 0, 1.1*specmax ] )
-            ofigname = 'traces_{0}.png'.format( image_root )
-            ofigpath = os.path.join( tracedir, ofigname )
-            plt.savefig( ofigpath )
-            plt.close()
-            print ' ... saved figure {0}'.format( ofigname )
+                buff = 0.05
+                nrows = stellar.nstars
+                axh = ( 1. - nrows*buff )/float( nrows )
+                axw = ( 1. - 4*buff )/3.
+                xlow1 = 1.5*buff
+                xlow2 = xlow1 + axw + buff
+                xlow3 = xlow2 + axw + buff
+                for k in range( stellar.nstars ):
+                    row_number = k%nrows + 1
+                    ylow = 1. - buff - row_number*( axh + 0.5*buff )
+                    if k==0:
+                        axprof = fig.add_axes( [ xlow1, ylow, axw, axh ] )
+                        axtr = fig.add_axes( [ xlow2, ylow, axw, axh ] )
+                        axspec = fig.add_axes( [ xlow3, ylow, axw, axh ] )
+                        axspec0 = axspec
+                        axprof0 = axprof
+                        axtr0 = axtr
+                        axprof.set_title( 'cross-disp profile' )
+                        axtr.set_title( 'trace fit' )
+                        axspec.set_title( 'raw spectrum' )
+                        ymax = np.concatenate( y[k] ).max()
+                        specmax = spectra[k].max()
+                    else:
+                        axprof = fig.add_axes( [ xlow1, ylow, axw, axh ], sharey=axprof0 )
+                        axtr = fig.add_axes( [ xlow2, ylow, axw, axh ], sharey=axtr0 )
+                        axspec = fig.add_axes( [ xlow3, ylow, axw, axh ], sharey=axspec0 )
+                    axprof.set_ylabel( '{0}'.format( stellar.star_names[k] ) )
+                    if k==stellar.nstars-1:
+                        axprof.set_xlabel( 'cross-disp pixel coord' )
+                        axtr.set_xlabel( 'disp pixel coord' )
+                        axspec.set_xlabel( 'disp pixel coord' )
+                    # Plot the raw stellar spectrum:
+                    axspec.plot( xd[k], spectra[k], '-k', lw=2 )
+                    # Plot the cross-dispersion profile:
+                    for i in range( len( y[k] ) ):
+                        axprof.plot( xc[k], y[k][i], '-k', lw=2 )
+                        axprof.plot( xc[k], g[k][i], '-g', lw=1 )
+                    xlow = max( [ np.median( np.array( ti[k] ) - 15*np.array( s[k] ) ), \
+                                  stellar.crossdisp_bounds[k][0] ] )
+                    xupp = min( [ np.median( np.array( ti[k] ) + 15*np.array( s[k] ) ), \
+                                  stellar.crossdisp_bounds[k][1] ] )
+                    axprof.set_xlim( [ xlow, xupp ] )
+                    axprof.text( 0.05, 0.85, 'profile stdv = {0:.2f} pix'.format( np.median( s[k] ) ), \
+                                 fontsize=8, horizontalalignment='left', transform=axprof.transAxes )
+                    # Plot the trace fit:
+                    axtr.plot( xd[k], t[k] - np.median( t[k] ), '-r', lw=2 )
+                    axtr.plot( ci[k], ti[k] - np.median( t[k] ), 'o', mec='k', mfc='k', ms=7 )
+                    axtr.fill_between( xd[k], \
+                                       t[k] - np.median( t[k] ) - np.median( s[k] ), \
+                                       t[k] - np.median( t[k] ) + np.median( s[k] ), \
+                                       color=[0.8,0.8,0.8] )
+                axprof0.set_ylim( [ 0, 1.1*ymax ] )
+                axtr0.set_ylim( [ -10, +10 ] )
+                axspec0.set_ylim( [ 0, 1.1*specmax ] )
+                ofigname = 'traces_{0}.png'.format( image_root )
+                ofigpath = os.path.join( tracedir, ofigname )
+                plt.savefig( ofigpath )
+                plt.close()
+                print ' ... saved figure {0}'.format( ofigname )
+            except:
+                print 'Unable to generate figure for {0} - skipping'.format( ofigname )
+                continue 
         fwhms_str = ''
         for k in range( stellar.nstars ):
             fwhms_str += ' {0:.2f},'.format( fwhms[j,k] )
