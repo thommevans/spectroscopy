@@ -612,7 +612,7 @@ def extract_spectra( stellar ):
     stellar.science_spectra_lists = []
     for k in range( stellar.nstars ):
         trace_list_file = os.path.join( stellar.adir, stellar.science_traces_list[k] )
-        trace_files += [ np.loadtxt( trace_list_file, dtype=str ) ]
+        trace_files += [ np.loadtxt( trace_list, dtype=str ) ]
         ext = 'science_spectra_{0}.lst'.format( stellar.star_names[k] )
         science_spectrum_ofilepath = os.path.join( stellar.adir, ext )
         science_spectra_ofiles += [ open( science_spectrum_ofilepath, 'w' ) ]
@@ -674,13 +674,12 @@ def extract_spectra( stellar ):
         apflux = []
         nappixs = []
         skyppix = []
-        fwhm = []
         for k in range( stellar.nstars ):
 
             # Read in the array containing the trace fit:
             trace_file_path_kj = os.path.join( stellar.adir, trace_files[k][j] )
             trace_hdu = fitsio.FITS( trace_file_path_kj )
-            fwhm += [ trace_hdu[1].read_header()['FWHM'] ]
+            fwhm = trace_hdu[1].read_header()['FWHM']
             disp_pixs = trace_hdu[1].read_column( 'DISPPIXS') 
             trarray = trace_hdu[1].read_column( 'TRACE') 
 
@@ -691,8 +690,7 @@ def extract_spectra( stellar ):
             crossdisp_ixs_k = ( crossdisp_pixrange>=cl )*( crossdisp_pixrange<=cu )
             dl = stellar.disp_bounds[k][0]
             du = stellar.disp_bounds[k][1]
-            disp_ixs_k = ( disp_pixrange>=disp_pixs.min() )*\
-                         ( disp_pixrange<=disp_pixs.max() )
+            disp_ixs_k = ( disp_pixrange>=dl )*( disp_pixrange<=du )
             # Cut out a subarray containing the spectrum data:
             if stellar.disp_axis==0:
                 subarray_k = darray[disp_ixs_k,:][:,crossdisp_ixs_k]
@@ -722,11 +720,11 @@ def extract_spectra( stellar ):
             # Loop over each pixel column along the
             # dispersion axis:
             for i in range( npix_disp ):
-
-                crossdisp_central_pix = trarray[i]
                 if stellar.disp_axis==0:
+                    crossdisp_central_pix = trarray[i,1]
                     crossdisp_row = subarrays[k][i,:]
                 else:
+                    crossdisp_central_pix = trarray[i,1]
                     crossdisp_row = subarrays[k][:,i]
 
                 # Before proceeding, make sure the fitted trace
@@ -885,7 +883,7 @@ def extract_spectra( stellar ):
                     os.remove( ospec_filepath )
                 fits = fitsio.FITS( ospec_filepath, 'rw' )
                 trace_filename = os.path.basename( trace_files[k][j] )
-                header = { 'IMAGE':image_filename, 'TRACE':trace_filename, 'JD-OBS':jdobs, 'FWHM':fwhm[k] }
+                header = { 'IMAGE':image_filename, 'TRACE':trace_filename, 'JD-OBS':jdobs }
                 fits.write( data, header=header )
                 fits.close()
                 print ' ... saved {0}'.format( ospec_filepath )
