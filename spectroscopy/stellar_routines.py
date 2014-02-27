@@ -401,8 +401,8 @@ def fit_traces( stellar, make_plots=False ):
                 # NOTE: I loop over each element in the series here to avoid a
                 # bizarre bug with numpy. In theory, it should be possible to
                 # do this bit simply using: 
-                #ixsl = disp_pixs<bincents_disp_good.min()
-                #ixsu = disp_pixs>bincents_disp_good.max()
+                ixsl = disp_pixs<bincents_disp_good.min()
+                ixsu = disp_pixs>bincents_disp_good.max()
                 # I have absolutely no idea why numpy seems to be making such a
                 # trivial error, but hopefully it gets fixed in the future. It's
                 # a pretty big concern, actually, because it could introduce subtle
@@ -412,16 +412,16 @@ def fit_traces( stellar, make_plots=False ):
                 # whereas I don't get the same odd behaviour for v1.7 for instance.
                 # So in the future it should be possible to revert the following
                 # lines to the simpler version above, presumably.
-                ixsl = []
-                for w in range( len( disp_pixs ) ):
-                    if disp_pixs[w]<bincents_disp_good.min():
-                        ixsl += [ w ]
-                ixsl = np.array( ixsl )
-                ixsu = []
-                for w in range( len( disp_pixs ) ):
-                    if disp_pixs[w]>bincents_disp_good.max():
-                        ixsu += [ w ]
-                ixsu = np.array( ixsu )
+                #ixsl = []
+                #for w in range( len( disp_pixs ) ):
+                #    if disp_pixs[w]<bincents_disp_good.min():
+                #        ixsl += [ w ]
+                #ixsl = np.array( ixsl )
+                #ixsu = []
+                #for w in range( len( disp_pixs ) ):
+                #    if disp_pixs[w]>bincents_disp_good.max():
+                #        ixsu += [ w ]
+                #ixsu = np.array( ixsu )
                 
                 trace[ixsl] = linear_extrapolation( disp_pixs[ixsl], \
                                                     bincents_disp_good[0:2], \
@@ -796,6 +796,17 @@ def extract_spectra( stellar ):
                             - sky
                 nappixs[i] = npix_full + nfracpix_u + nfracpix_l
                 skyppix[i] = sky/float( nappixs[i] )
+                # This stuff is for temporary testing:
+                ## plt.close('all')
+                ## y1 = skyfunc( fullap_pixs )
+                ## y2 = darray_full
+                ## plt.plot( fullap_pixs, y1 )
+                ## plt.plot( fullap_pixs, y2 )
+                ## maxix = np.argmax( y2 )
+                ## plt.axvline( fullap_pixs[maxix], ls='-' )
+                ## plt.axvline( fullap_pixs[maxix]+1*8, ls='--' )
+                ## plt.axvline( fullap_pixs[maxix]+2*8, ls='--' )
+                ## pdb.set_trace()
             
             # Save the spectra for the current star in the current
             # image to a fits table:
@@ -803,7 +814,6 @@ def extract_spectra( stellar ):
                                                 ( 'apflux', np.float64 ), \
                                                 ( 'nappixs', np.float64 ), \
                                                 ( 'skyppix', np.float64 ) ] )
-
             # Define filename for the output spectrum of
             # the current star for the current image:
             ospec_root = 'spec1d_{0}'.format( image_root )
