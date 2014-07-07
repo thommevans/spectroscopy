@@ -712,8 +712,6 @@ def extract_spectra( stellar ):
                 nfracpix_l = l_full - ( crossdisp_central_pix - stellar.spectral_ap_radius )
 
                 # Simple sanity check:
-                # NOTE: The eps=1e-10 offsets are to account for the basic numpy bug
-                # that seems to have crept in with the macports v1.8 installation...
                 if ( npix_full + nfracpix_l + nfracpix_u )>2*stellar.spectral_ap_radius+eps:
                     pdb.set_trace() # this shouldn't happen
                 elif ( npix_full + nfracpix_l + nfracpix_u )<2*stellar.spectral_ap_radius-eps:
@@ -922,7 +920,8 @@ def calibrate_wavelength_scale( stellar, poly_order=1, make_plots=False ):
         residuals = wav_fiducial-wav_fits_output_k
         print '  WAV --> ', wav_fiducial
         print '  PIX --> ', pix_measured
-        print '  Max wavelength discrepancy = {0}'.format( np.abs( residuals ).max() )
+        print '  Max wavelength discrepancy = {0} (units of input fiducial wavelengths; not pixels)'\
+              .format( np.abs( residuals ).max() )
         stellar.wavsol['disp_pixs_input'] += [ np.array( disp_pixs_input_k ) ]
         stellar.wavsol['wav_fits_output'] += [ np.array( wav_fits_output_k ) ]
         stellar.wavsol['wavsol_coeffs'] += [ np.array( wavsol_coeffs_k ) ]
