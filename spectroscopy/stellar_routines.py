@@ -793,19 +793,11 @@ def extract_spectra( stellar ):
                             + darray_fracupper \
                             - sky
                 nappixs[i] = npix_full + nfracpix_u + nfracpix_l
+                blah=apflux[i]+sky-np.median(crossdisp_row)*nappixs[i]
+                print apflux[i], blah
+                pdb.set_trace()
                 skyppix[i] = sky/float( nappixs[i] )
-                # This stuff is for temporary testing:
-                ## plt.close('all')
-                ## y1 = skyfunc( fullap_pixs )
-                ## y2 = darray_full
-                ## plt.plot( fullap_pixs, y1 )
-                ## plt.plot( fullap_pixs, y2 )
-                ## maxix = np.argmax( y2 )
-                ## plt.axvline( fullap_pixs[maxix], ls='-' )
-                ## plt.axvline( fullap_pixs[maxix]+1*8, ls='--' )
-                ## plt.axvline( fullap_pixs[maxix]+2*8, ls='--' )
-                ## pdb.set_trace()
-            
+
             # Save the spectra for the current star in the current
             # image to a fits table:
             data = np.zeros( npix_disp, dtype=[ ( 'disp_pixs', np.int64 ), \
