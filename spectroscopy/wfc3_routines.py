@@ -44,6 +44,4 @@ def extract_spatscan_specra( images, ap_radius=60 ):
         xupp_partial = xmax - xmax_full
         spectra[:,i] += images[xupp_partial,:,i]
 
-    data = { 'mjd':mjd, 'spectra':spectra, 'centers':centers }
-
-    return data
+    return spectra
