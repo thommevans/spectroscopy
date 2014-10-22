@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import os, pdb, sys
 import scipy.optimize
 import scipy.interpolate
+import scipy.ndimage
 import glob
 import fitsio
 import atpy
@@ -11,7 +12,7 @@ import atpy
 # TODO - wrap these routines up as attributes of spectroscopy
 # opjects somehow.
 
-def calc_spectra_variations( spectra, ref_spectrum, max_wavshift=5, dwav=0.01 ):
+def calc_spectra_variations( spectra, ref_spectrum, max_wavshift=5, dwav=0.01, smoothing_fwhm=None ):
     """
     GIVEN SPECTRA EXTRACTED FROM EACH FRAME AND A REFERENCE
     SPECTRUM, WILL HORIZONTALLY SHIFT AND VERTICALLY STRETCH
@@ -20,12 +21,20 @@ def calc_spectra_variations( spectra, ref_spectrum, max_wavshift=5, dwav=0.01 ):
     NOTE THAT DWAV IS IN UNITS OF PIXELS, AND THE RETURNED 
     WAVSHIFTS VARIABLE IS ALSO IN UNITS OF PIXELS.
     """
-    
+
     frame_axis = 0 # TODO = this should call the object property
     disp_axis = 1 # TODO = this should call the object property
     nframes, ndisp = np.shape( spectra ) # TODO = this should call the object property
     dashifts = np.zeros( nframes )
     vstretches = np.zeros( nframes )
+
+    # Convert smoothing fwhm to the standard deviation of the
+    # Gaussian kernel, and smooth the reference spectrum:
+    if smoothing_fwhm!=None:
+        smoothing_sig = smoothing_fwhm/2./np.sqrt( 2.*np.log( 2. ) )
+        ref_spectrum = scipy.ndimage.filters.gaussian_filter1d( ref_spectrum, smoothing_sig )
+    else:
+        smoothing_sig = None
 
     # Interpolate the reference spectrum on to a grid with
     # increments equal to the dwav shift increment:
@@ -48,19 +57,24 @@ def calc_spectra_variations( spectra, ref_spectrum, max_wavshift=5, dwav=0.01 ):
 
         print 'Frame {0} of {1}'.format( j+1, nframes )
 
-        # Interpolate the current science spectrum on to 
-        # the fine-scale grid of shift increments:
-        specf = np.interp( xf, x, spectra[j,:] )
+        # The current science spectrum:
+        spec_j = spectra[j,:]
+        if smoothing_sig!=None:
+            # Smooth with a 1D Gaussian filter:
+            spec_j = scipy.ndimage.filters.gaussian_filter1d( spec_j, smoothing_sig )
+
+        # Interpolate on to fine grid of shift increments:
+        specf = np.interp( xf, x, spec_j )
         y = np.reshape( specf, [ ninterp, 1 ] )
 
-        # Loop over each trial shift:
+        # Loop over each trial shift of the reference spectrum:
         rms = np.zeros( nshifts )
         vstretches_j = np.zeros( nshifts )
         for i in range( nshifts ):
             new_spec = np.zeros( ninterp )
 
-            # Determine where the lower edge of the 
-            # shifted spectrum will be located on the 
+            # Determine where the lower edge of the shifted
+            # reference spectrum will be located on the 
             # fine-scale grid:
             ix = ix0+i
             if ix<0:
@@ -95,7 +109,6 @@ def calc_spectra_variations( spectra, ref_spectrum, max_wavshift=5, dwav=0.01 ):
         ix = np.argmin( rms )
         wavshifts[j] = shifts0[ix]
         vstretches[j] = vstretches_j[ix]
-
     return wavshifts, vstretches
 
 def extract_spatscan_specra( images, ap_radius=60, ninterp=10000 ):
