@@ -793,9 +793,6 @@ def extract_spectra( stellar ):
                             + darray_fracupper \
                             - sky
                 nappixs[i] = npix_full + nfracpix_u + nfracpix_l
-                blah=apflux[i]+sky-np.median(crossdisp_row)*nappixs[i]
-                print apflux[i], blah
-                pdb.set_trace()
                 skyppix[i] = sky/float( nappixs[i] )
 
             # Save the spectra for the current star in the current
