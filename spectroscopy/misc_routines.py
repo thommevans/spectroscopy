@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 
 
-def shiftstretch( spectra, ref_spectrum, max_wavshift=5, dwav=0.01, ixs=[] ):
+def shiftstretch( spectra, ref_spectrum, max_wavshift=5, dwav=0.01, disp_bound_ixs=[] ):
     """
     Horizontally shift and vertically stretch spectra to give best-fit to a reference spectrum.
 
@@ -25,31 +25,48 @@ def shiftstretch( spectra, ref_spectrum, max_wavshift=5, dwav=0.01, ixs=[] ):
     disp_shifts = np.zeros( nframes )
     vstretches = np.zeros( nframes )
     nrange = int( np.round( max_wavshift/float( dwav ) ) )
-    shifted = np.zeros( [ ndisp, 2*nrange+1 ] )
+    ntrials = 2*nrange + 1
+    shifted = np.zeros( [ ndisp, ntrials ] )
     x = np.arange( -2, ndisp+2 )
     ref_spectrum_ext = np.concatenate( [ np.zeros( 2 ), ref_spectrum, np.zeros( 2 ) ] )
     interpf = scipy.interpolate.interp1d( x, ref_spectrum_ext, kind='cubic' )
+
+    pixshifts = np.zeros( ntrials )
     for j in range( -nrange, nrange+1 ):
         dw = j*dwav
-        shifted[:,j+nrange] = interpf( np.arange( ndisp ) + dw )
+        shifted[:,j+nrange] = interpf( np.arange( ndisp )+dw )
+        pixshifts[j+nrange] = dw
     dspec = np.zeros( [ nframes, ndisp ] )
+    voff = np.zeros( nframes )
+    vstretch = np.zeros( nframes )
+    dispshift = np.zeros( nframes )
     for i in range( nframes ):
         A = np.ones( [ ndisp, 2 ] )
         print i+1, nframes
-        ntrials = 2*nrange + 1
         diff = np.zeros( [ ntrials, ndisp ] )
         rms = np.zeros( ntrials )
+        voff_i = np.zeros( ntrials )
+        vstretch_i = np.zeros( ntrials )
+        dispshift_i = np.zeros( ntrials )
         for j in range( -nrange, nrange+1 ):
             A[:,1] = shifted[:,j+nrange]
             b = np.reshape( spectra[i,:], [ ndisp, 1 ] )
             res = np.linalg.lstsq( A, b )
             c = res[0].flatten()
             fit = np.dot( A, c )
+            voff_i[j] = c[0]
+            vstretch_i[j] = c[1]
             diff[j+nrange,:] = spectra[i,:] - fit
-            if ixs==[]:
+            if disp_bound_ixs==[]:
                 rms[j+nrange] = np.sqrt(np.mean(diff[j+nrange,:]**2))
             else:
-                rms[j+nrange] = np.sqrt(np.mean(diff[j+nrange,ixs[0]:ixs[1]+1]**2))
+                ix1 = disp_bound_ixs[0]
+                ix2 = disp_bound_ixs[1]
+                rms[j+nrange] = np.sqrt(np.mean(diff[j+nrange,ix1:ix2+1]**2))
         ix = np.argmin( rms )
         dspec[i,:] = diff[ix,:]/ref_spectrum
-    return dspec
+        voff[i] = voff_i[ix]
+        vstretch[i] = vstretch_i[ix]
+        dispshift[i] = pixshifts[ix]
+
+    return dspec, voff, vstretch, dispshift
