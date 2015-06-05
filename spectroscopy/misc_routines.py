@@ -11,7 +11,7 @@ def shiftstretch( spectra, ref_spectrum, max_wavshift=5, dwav=0.01, disp_bound_i
     Horizontally shift and vertically stretch spectra to give best-fit to a reference spectrum.
 
     Inputs:
-    ** spectra - 2D array containing the time series spectra.
+    ** spectra - 2D array containing the time series spectra in electrons.
     ** ref_spectrum - 1D array containing the reference spectrum.
     ** max_wavshift - The maximum number of pixels to horizontally shift each spectra
       by when comparing to the reference spectrum.
@@ -48,15 +48,16 @@ def shiftstretch( spectra, ref_spectrum, max_wavshift=5, dwav=0.01, disp_bound_i
         voff_i = np.zeros( ntrials )
         vstretch_i = np.zeros( ntrials )
         dispshift_i = np.zeros( ntrials )
+        spec_i = spectra[i,:]
         for j in range( -nrange, nrange+1 ):
             A[:,1] = shifted[:,j+nrange]
-            b = np.reshape( spectra[i,:], [ ndisp, 1 ] )
+            b = np.reshape( spec_i, [ ndisp, 1 ] )
             res = np.linalg.lstsq( A, b )
             c = res[0].flatten()
             fit = np.dot( A, c )
             voff_i[j] = c[0]
             vstretch_i[j] = c[1]
-            diff[j+nrange,:] = spectra[i,:] - fit
+            diff[j+nrange,:] = spec_i - fit
             if disp_bound_ixs==[]:
                 rms[j+nrange] = np.sqrt(np.mean(diff[j+nrange,:]**2))
             else:
