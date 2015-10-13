@@ -38,6 +38,9 @@ class stellar():
         # Record of frames that have been flagged as good or bad:
         self.goodbad = None
         
+        # The number of extensions per fits file containing science data:
+        self.next = 1
+
         return None
 
     def identify_badpixels( self ):

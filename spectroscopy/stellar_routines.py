@@ -48,8 +48,18 @@ def identify_badpixels( stellar ):
 
     if stellar.star_names==None:
         stellar.star_names = []
-        for k in range( stellar.nstars ):
-            stellar.star_names += [ 'star{0}'.format( k ) ]
+        if stellar.n_exts==1:
+            for k in range( stellar.n_stars ):
+                stellar.star_names += [ 'star{0}'.format( k ) ]
+        else:
+            counter = 0
+            stellar.star_names = []
+            for i in range( stellar.n_exts ):
+                star_names_i = []
+                for k in range( stellar.n_stars[i] ):
+                    star_names_i += [ 'star{0}'.format( counter ) ]
+                    counter += 1
+                stellar.star_names += [ star_names_i ]
     
     # Read in the science images:
     science_images = np.loadtxt( stellar.science_images_list, dtype=str )
@@ -60,7 +70,7 @@ def identify_badpixels( stellar ):
     if ( stellar.badpix_static!=None )*( stellar.badpix_static!='' ):
         badpix_path = os.path.join( stellar.adir, stellar.badpix_static )
         badpix_static_hdu = fitsio.FITS( badpix_path )
-        badpix_static = badpix_static_hdu[1].read_image()
+        badpix_static = badpix_static_hdu[1].read()
         badpix_static_hdu.close()
     else:
         badpix_static = None
@@ -70,118 +80,138 @@ def identify_badpixels( stellar ):
     nsigma_thresh = 10
     niterations = 2
     print '\nBad pixel flagging:'
-    untainted_frames = np.ones( nimages )
-    for i in range( niterations ):
-        print ' ... iteration {0} of {1}'.format( i+1, niterations )
+    # Loop over each FITS extension individually:
+    for k in range( stellar.n_exts ):
+        # Array that keeps a record of those frames that have
+        # not previously been flagged as bad, and hence can be
+        # used in the slider:
+        untainted_frames = np.ones( nimages )
+        # Iterate the bad pixel flagging:
+        for i in range( niterations ):
+            print ' ... iteration {0} of {1} (for chip {2} of {3})'\
+                  .format( i+1, niterations, k+1, stellar.n_exts )
+            # Loop over each FITS file:
+            for j in range( nimages ):
+                if j%20==0:
+                    print '... up to image {0} of {1} (iteration {2} of {3})'\
+                          .format( j+1, nimages, i+1, niterations )
+                # Load current image and measure dimensions of current extension:
+                image_filename = science_images[j]
+                image_root = image_filename[:image_filename.rfind('.')]
+                image_filepath = os.path.join( stellar.ddir, image_filename )
+                image_hdu_current = fitsio.FITS( image_filepath, 'rw' )
+                header0 = image_hdu_current[0].read_header()
+                header1 = image_hdu_current[k+1].read_header()            
+                current_data = image_hdu_current[k+1].read()
+                image_hdu_current.close()
 
-        for j in range( nimages ):
+                # Determine the indices of the frames in the slider before and
+                # after the current frame:
+                ixs_before = j - np.arange( nslide ) - 1
+                ixs_after = j + np.arange( nslide ) + 1
+                ixs_before = ixs_before[ixs_before>=0]
+                ixs_after = ixs_after[ixs_after<nimages]
+                ixs_before = ixs_before[np.argsort( ixs_before )]
+                ixs_after = ixs_after[np.argsort( ixs_after )]
+                ixs_slide = np.concatenate( [ ixs_before, [j], ixs_after ] )
+                # The number of frames in the slider:
+                ncontrol = len( ixs_before ) + len( ixs_after )
 
-            if j%20==0:
-                print '... up to image {0} of {1} (iteration {2} of {3})'\
-                      .format( j+1, nimages, i+1, niterations )
-
-            # Load current image and measure dimensions:
-            image_filename = science_images[j]
-            image_root = image_filename[:image_filename.rfind('.')]
-            image_filepath = os.path.join( stellar.ddir, image_filename )
-            image_hdu_current = fitsio.FITS( image_filepath, 'rw' )
-            header0 = image_hdu_current[0].read_header()
-            header1 = image_hdu_current[1].read_header()
-            current_data = image_hdu_current[1].read_image()
-            image_hdu_current.close()
-
-            ixs_before = j - np.arange( nslide ) - 1
-            ixs_after = j + np.arange( nslide ) + 1
-            ixs_before = ixs_before[ixs_before>=0]
-            ixs_after = ixs_after[ixs_after<nimages]
-            ixs_before = ixs_before[np.argsort( ixs_before )]
-            ixs_after = ixs_after[np.argsort( ixs_after )]
-            ixs_slide = np.concatenate( [ ixs_before, [j], ixs_after ] )
-            ncontrol = len( ixs_before ) + len( ixs_after )
-
-            # If this is the first frame we need to construct
-            # the slider frames to compare against:
-            if j==0:
-                dims = np.shape( current_data )
-                disp_pixrange = np.arange( dims[stellar.disp_axis] )
-                crossdisp_pixrange = np.arange( dims[stellar.crossdisp_axis] )
-                slider_data = []
-                for jj in ixs_slide:
-                    image_filename_jj = science_images[jj]
-                    image_root_jj = image_filename_jj[:image_filename_jj.rfind('.')]
-                    image_filepath_jj = os.path.join( stellar.ddir, image_filename_jj )
-                    image_hdu_jj = fitsio.FITS( image_filepath_jj )
-                    slider_data += [ image_hdu_jj[1].read_image() ]
-                    image_hdu_jj.close()
-                slider_data = np.dstack( slider_data )
-            else:
-                # Drop the first frame of the slider:
-                if j>nslide:
-                    slider_data = slider_data[:,:,1:]
-                # Add a new slide to the leading edge,
-                # unless we're close to the end:
-                if j<nimages-nslide:
-                    image_filename_lead = science_images[ixs_slide[-1]]
-                    image_root_lead = image_filename_lead[:image_filename_lead.rfind('.')]
-                    image_filepath_lead = os.path.join( stellar.ddir, image_filename_lead )
-                    image_hdu_lead = fitsio.FITS( image_filepath_lead )
-                    lead_data = image_hdu_lead[1].read_image()
-                    image_hdu_lead.close()
-                    slider_data = np.dstack( [ slider_data, lead_data ] )
-            # Determine which slider frames are untainted:
-            untainted = ( untainted_frames[ixs_slide]==1 )*( ixs_slide!=j )
-            ixs_use = np.arange( ncontrol+1 )[untainted]
-
-            # Loop over each star on the image:
-            badpix_j = np.zeros( dims )
-            for k in range( stellar.nstars ):
-                dl = stellar.disp_bounds[k][0]
-                du = stellar.disp_bounds[k][1]
-                cl = stellar.crossdisp_bounds[k][0]
-                cu = stellar.crossdisp_bounds[k][1]
-                crossdisp_ixs = ( crossdisp_pixrange>=cl )*( crossdisp_pixrange<=cu )
-                disp_ixs = ( disp_pixrange>=dl )*( disp_pixrange<=du )
-                if stellar.disp_axis==0:
-                    subdarray = current_data[dl:du+1,cl:cu+1]
-                    subslider = slider_data[dl:du+1,cl:cu+1,:]
+                # If this is the first frame we need to construct
+                # the slider frames to compare against:
+                if j==0:
+                    dims = np.shape( current_data )
+                    disp_pixrange = np.arange( dims[stellar.disp_axis] )
+                    crossdisp_pixrange = np.arange( dims[stellar.crossdisp_axis] )
+                    slider_data = []
+                    for jj in ixs_slide:
+                        image_filename_jj = science_images[jj]
+                        image_root_jj = image_filename_jj[:image_filename_jj.rfind('.')]
+                        image_filepath_jj = os.path.join( stellar.ddir, image_filename_jj )
+                        image_hdu_jj = fitsio.FITS( image_filepath_jj )
+                        slider_data += [ image_hdu_jj[k+1].read() ]
+                        image_hdu_jj.close()
+                    slider_data = np.dstack( slider_data )
                 else:
-                    subdarray = current_data[cl:cu+1,dl:du+1]
-                    subslider = slider_data[cl:cu+1,dl:du+1,:]
-                med_sub = np.median( subslider[:,:,ixs_use], axis=2 )
-                sig_sub = np.std( subslider[:,:,ixs_use], axis=2 )
-                delsigmas_sub = abs( ( subdarray - med_sub )/sig_sub )
-                ixs_bad = ( delsigmas_sub>nsigma_thresh )
-                frac_bad = ixs_bad.sum()/float( ixs_bad.size )
-                if ( frac_bad>1e-3 )*( i<niterations-1 ):
-                        untainted_frames[j] = 0
-                        print 'Flagging frame {0} as containing >1e-3 bad pixel fraction for {1}'\
-                              .format( image_filename, stellar.star_names[k] )
-                if stellar.disp_axis==0:
-                    badpix_j[dl:du+1,cl:cu+1][ixs_bad] = 1
-                else:
-                    badpix_j[cl:cu+1,dl:du+1][ixs_bad] = 1
-                    
-            if i==niterations-1:
-                nbad_transient = badpix_j.sum()
-                if badpix_static!=None:
-                    badpix_j += badpix_static
+                    # Drop the first frame of the slider:
+                    if j>nslide:
+                        slider_data = slider_data[:,:,1:]
+                    # Add a new slide to the leading edge,
+                    # unless we're close to the end:
+                    if j<nimages-nslide:
+                        image_filename_lead = science_images[ixs_slide[-1]]
+                        image_root_lead = image_filename_lead[:image_filename_lead.rfind('.')]
+                        image_filepath_lead = os.path.join( stellar.ddir, image_filename_lead )
+                        image_hdu_lead = fitsio.FITS( image_filepath_lead )
+                        lead_data = image_hdu_lead[k+1].read()
+                        image_hdu_lead.close()
+                        slider_data = np.dstack( [ slider_data, lead_data ] )
+                # Determine which slider frames are untainted:
+                untainted = ( untainted_frames[ixs_slide]==1 )*( ixs_slide!=j )
+                ixs_use = np.arange( ncontrol+1 )[untainted]
 
-                # If bad pixels have been flagged more than once,
-                # set their value to 1 in the bad pixel map:
-                ixs = ( badpix_j!=0 )
-                badpix_j[ixs] = 1
-                if os.path.isfile( image_filepath ):
-                    os.remove( image_filepath )
-                image_hdu = fitsio.FITS( image_filepath, 'rw' )
-                image_hdu.write( None, header=header0 )
-                image_hdu.write( current_data, header=header1 )
-                image_hdu.write( badpix_j )
-                image_hdu.close()
+                # Loop over each star on the image:
+                badpix_j = np.zeros( dims )
+                # Note that the number of stars depends on which
+                # FITS extension we are analysing:
+                if stellar.n_exts==1:
+                    nstars_k = stellar.nstars
+                else:
+                    nstars_k = stellar.nstars[k]
+                for l in range( nstars_k ):
+                    if stellar.n_exts==1:
+                        dl = stellar.disp_bounds[l][0]
+                        du = stellar.disp_bounds[l][1]
+                        cl = stellar.crossdisp_bounds[l][0]
+                        cu = stellar.crossdisp_bounds[l][1]
+                    else:
+                        dl = stellar.disp_bounds[k][l][0]
+                        du = stellar.disp_bounds[k][l][1]
+                        cl = stellar.crossdisp_bounds[k][l][0]
+                        cu = stellar.crossdisp_bounds[k][l][1]
+                    crossdisp_ixs = ( crossdisp_pixrange>=cl )*( crossdisp_pixrange<=cu )
+                    disp_ixs = ( disp_pixrange>=dl )*( disp_pixrange<=du )
+                    if stellar.disp_axis==0:
+                        subdarray = current_data[dl:du+1,cl:cu+1]
+                        subslider = slider_data[dl:du+1,cl:cu+1,:]
+                    else:
+                        subdarray = current_data[cl:cu+1,dl:du+1]
+                        subslider = slider_data[cl:cu+1,dl:du+1,:]
+                    med_sub = np.median( subslider[:,:,ixs_use], axis=2 )
+                    sig_sub = np.std( subslider[:,:,ixs_use], axis=2 )
+                    delsigmas_sub = abs( ( subdarray - med_sub )/sig_sub )
+                    ixs_bad = ( delsigmas_sub>nsigma_thresh )
+                    frac_bad = ixs_bad.sum()/float( ixs_bad.size )
+                    if ( frac_bad>1e-3 )*( i<niterations-1 ):
+                            untainted_frames[j] = 0
+                            print 'Flagging frame {0} as containing >1e-3 bad pixel fraction for {1}'\
+                                  .format( image_filename, stellar.star_names[l] )
+                    if stellar.disp_axis==0:
+                        badpix_j[dl:du+1,cl:cu+1][ixs_bad] = 1
+                    else:
+                        badpix_j[cl:cu+1,dl:du+1][ixs_bad] = 1
+
                 if i==niterations-1:
-                    nbad_total = badpix_j.sum()
-                    if nbad_transient>0:
-                        print 'Flagged {0} transient bad pixels in image {1}'\
-                              .format( nbad_transient, image_filename )
+                    nbad_transient = badpix_j.sum()
+                    if badpix_static!=None:
+                        badpix_j += badpix_static
+
+                    # If bad pixels have been flagged more than once,
+                    # set their value to 1 in the bad pixel map:
+                    ixs = ( badpix_j!=0 )
+                    badpix_j[ixs] = 1
+                    if os.path.isfile( image_filepath ):
+                        os.remove( image_filepath )
+                    image_hdu = fitsio.FITS( image_filepath, 'rw' )
+                    image_hdu.write( None, header=header0 )
+                    image_hdu.write( current_data, header=header1 )
+                    image_hdu.write( badpix_j )
+                    image_hdu.close()
+                    if i==niterations-1:
+                        nbad_total = badpix_j.sum()
+                        if nbad_transient>0:
+                            print 'Flagged {0:.0f} transient bad pixels in image {1}'\
+                                  .format( nbad_transient, image_filename )
 
     return None
 
@@ -247,8 +277,8 @@ def fit_traces( stellar, make_plots=False ):
         image_root = image_filename[:image_filename.rfind('.')]
         image_filepath = os.path.join( stellar.ddir, image_filename )
         image_hdu = fitsio.FITS( image_filepath )
-        darray = image_hdu[1].read_image()
-        badpix = image_hdu[2].read_image()
+        darray = image_hdu[1].read()
+        badpix = image_hdu[2].read()
         darray = np.ma.masked_array( darray, mask=badpix )
         image_hdu.close()
 
@@ -630,8 +660,8 @@ def extract_spectra( stellar ):
             image_filepath = os.path.join( stellar.ddir, image_filename )
             image_hdu = fitsio.FITS( image_filepath )
             header = image_hdu[1].read_header()
-            darray = image_hdu[1].read_image()
-            badpix = image_hdu[2].read_image()
+            darray = image_hdu[1].read()
+            badpix = image_hdu[2].read()
             darray = np.ma.masked_array( darray, mask=badpix )
             arr_dims = np.shape( darray )
             disp_pixrange = np.arange( arr_dims[stellar.disp_axis] )
@@ -843,7 +873,7 @@ def calibrate_wavelength_scale( stellar, poly_order=1, make_plots=False ):
     plt.ioff()
     
     marc_hdu = fitsio.FITS( stellar.wcal_kws['marc_file'], 'r' )
-    marc = marc_hdu[1].read_image()
+    marc = marc_hdu[1].read()
     marc_hdu.close()
     arr_dims = np.shape( marc )
     if stellar.disp_axis==0:

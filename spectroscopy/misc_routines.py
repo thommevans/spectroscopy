@@ -40,6 +40,10 @@ def shiftstretch( spectra, ref_spectrum, max_wavshift=5, dwav=0.01, disp_bound_i
     voff = np.zeros( nframes )
     vstretch = np.zeros( nframes )
     dispshift = np.zeros( nframes )
+    ####delete
+    #np.savetxt('/home/tevans/Desktop/delete.txt',spectra)
+    #pdb.set_trace()
+    ####delete
     for i in range( nframes ):
         A = np.ones( [ ndisp, 2 ] )
         print i+1, nframes
