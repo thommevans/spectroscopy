@@ -253,11 +253,20 @@ def fit_traces( stellar, make_plots=False ):
     # the trace file names:
     science_traces_ofiles = []
     stellar.science_traces_list = []
-    for k in range( stellar.nstars ):
-        ext = 'science_traces_{0}.lst'.format( stellar.star_names[k] )
-        science_trace_ofilepath = os.path.join( stellar.adir, ext )
-        science_traces_ofiles += [ open( science_trace_ofilepath, 'w' ) ]
-        stellar.science_traces_list += [ ext ]
+    if stellar.n_exts==1:
+        for k in range( stellar.nstars ):
+            ext = 'science_traces_{0}.lst'.format( stellar.star_names[k] )
+            science_trace_ofilepath = os.path.join( stellar.adir, ext )
+            science_traces_ofiles += [ open( science_trace_ofilepath, 'w' ) ]
+            stellar.science_traces_list += [ ext ]
+    else:
+        for j in range( stellar.n_exts ):
+            for k in range( stellar.nstars ):
+                ext = 'science_traces_{0}.lst'.format( stellar.star_names[j][k] )
+                science_trace_ofilepath = os.path.join( stellar.adir, ext )
+                science_traces_ofiles += [ open( science_trace_ofilepath, 'w' ) ]
+                stellar.science_traces_list += [ ext ]
+
 
     # Keep trace of the spectral trace fwhms across all images:
     fwhms = np.zeros( [ nimages, stellar.nstars ] )
