@@ -737,18 +737,21 @@ def extract_spectra( stellar ):
     # Read in the list of science images and traces:
     science_images_list_path = os.path.join( stellar.adir, stellar.science_images_list )
     science_images = np.loadtxt( science_images_list_path, dtype=str )
+    badpix_maps_list_path = os.path.join( stellar.adir, stellar.badpix_maps_list )
+    badpix_maps = np.loadtxt( badpix_maps_list_path, dtype=str )
     # TRACE LISTS = 1 FOR EACH EXTENSION IN EACH IMAGE
     #science_traces_list_path = os.path.join( stellar.adir, stellar.science_traces_list )
     #science_traces = np.loadtxt( science_traces_list_path, dtype=str )
     nimages = len( science_images )
     if stellar.goodbad==None:
         stellar.goodbad = np.ones( nimages )
-    
+    if len( badpix_maps )!=nimages:
+        pdb.set_trace()
+
     # Loop over each image, and extract the spectrum
     # for each star on each image:
     eps = 1e-10
     stellar.science_spectra_lists = []
-    pdb.set_trace()
     for j in range( nimages ):
         # First check if the current image has been
         # flagged as bad:
@@ -759,11 +762,12 @@ def extract_spectra( stellar ):
             continue
         # Load current image and associated bad pixel map:
         image_filename = science_images[j]
-        image_root = image_filename[:image_filename.rfind('.')]
+        #image_root = image_filename[:image_filename.rfind('.')]
         image_filepath = os.path.join( stellar.ddir, image_filename )
         image_hdu = fitsio.FITS( image_filepath )
-        badpix_map_filepath = os.path.join( stellar.ddir, badpix_map_filenames[j] )
-        badpix_hdu = fitsio.FITS( badpix_map_filepath )
+        badpix_filename = badpix_maps[j]
+        badpix_filepath = os.path.join( stellar.ddir, badpix_filename )
+        badpix_hdu = fitsio.FITS( badpix_filepath )
 
         # Loop over each FITS extension individually:
         for k in range( stellar.n_exts ):
