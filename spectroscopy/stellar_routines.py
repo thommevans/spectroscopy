@@ -7,6 +7,7 @@ import scipy.interpolate
 import glob
 import fitsio
 import atpy
+import cPickle
 
 """
 
@@ -85,13 +86,10 @@ def identify_badpixels( stellar ):
     nslide = 15
     nsigma_thresh = 10
     niterations = 2
-    print '\nBad pixel flagging:'
-
+    print '\nBad pixel flagging, using {0} iterations and a {1}-sigma threshold:'\
+          .format( niterations, nsigma_thresh )
     # Loop over each FITS file:
     for j in range( nimages ):
-        if j%20==0:
-            print '... up to image {0} of {1} (iteration {2} of {3})'\
-                  .format( j+1, nimages, i+1, niterations )
         # Load current image and measure dimensions of current extension:
         image_filename = science_images[j]
         image_root = image_filename[:image_filename.rfind('.')]
@@ -107,17 +105,25 @@ def identify_badpixels( stellar ):
         badpix_hdu.write( None, header=header0 )
         # Loop over each FITS extension individually:
         for k in range( stellar.n_exts ):
+            headerk = image_hdu_current[k+1].read_header()
+            current_data = image_hdu_current[k+1].read()
+            dims = np.shape( current_data )
+            disp_pixrange = np.arange( dims[stellar.disp_axis] )
+            crossdisp_pixrange = np.arange( dims[stellar.crossdisp_axis] )
+            if (j+1)%20==0:
+                print '... up to image {0} of {1}, chip {2} of {3}'\
+                      .format( j+1, nimages, k+1, stellar.n_exts )
             # Array that keeps a record of those frames that have
             # not previously been flagged as bad, and hence can be
             # used in the slider:
             untainted_frames = np.ones( nimages )
-            # Iterate the bad pixel flagging:
+            # Loop over each star on the image in order to create the
+            # bad pixel map for the current HDU extension:
+            badpix_jk = np.zeros( dims )
             for i in range( niterations ):
-                print ' ... iteration {0} of {1} (for chip {2} of {3})'\
-                      .format( i+1, niterations, k+1, stellar.n_exts )
-                headerk = image_hdu_current[k+1].read_header()            
-                current_data = image_hdu_current[k+1].read()
-                image_hdu_current.close()
+                #print ' ... iteration {0} of {1} (for chip {2} of {3})'\
+                #      .format( i+1, niterations, k+1, stellar.n_exts )
+
 
                 # Determine the indices of the frames in the slider before and
                 # after the current frame:
@@ -134,9 +140,6 @@ def identify_badpixels( stellar ):
                 # If this is the first frame we need to construct
                 # the slider frames to compare against:
                 if j==0:
-                    dims = np.shape( current_data )
-                    disp_pixrange = np.arange( dims[stellar.disp_axis] )
-                    crossdisp_pixrange = np.arange( dims[stellar.crossdisp_axis] )
                     slider_data = []
                     for jj in ixs_slide:
                         image_filename_jj = science_images[jj]
@@ -164,9 +167,6 @@ def identify_badpixels( stellar ):
                 untainted = ( untainted_frames[ixs_slide]==1 )*( ixs_slide!=j )
                 ixs_use = np.arange( ncontrol+1 )[untainted]
 
-                # Loop over each star on the image in order to create the
-                # bad pixel map for the current HDU extension:
-                badpix_jk = np.zeros( dims )
                 # Note that the number of stars depends on which
                 # FITS extension we are analysing:
                 if stellar.n_exts==1:
@@ -219,14 +219,15 @@ def identify_badpixels( stellar ):
                     # to the open FITS HDU:
                     badpix_hdu.write( badpix_jk, header=headerk )
 
-                    if i==niterations-1:
-                        nbad_total = badpix_j.sum()
-                        if nbad_transient>0:
-                            print 'Flagged {0:.0f} transient bad pixels in image {1}'\
-                                  .format( nbad_transient, image_filename )
+                    nbad_total = badpix_jk.sum()
+                    if nbad_transient>0:
+                        print 'Flagged {0:.0f} transient bad pixels on chip {1} in image {2} of {3} ({4})'\
+                              .format( nbad_transient, k+1, j+1, nimages, image_filename )
 
         # Having looped over all HDU extensions, 
-        # save the bad pixel map:
+        # close the open FITS HDU and save the bad
+        # pixel map:
+        image_hdu_current.close()
         badpix_hdu.close()
     return None
 
@@ -261,12 +262,21 @@ def fit_traces( stellar, make_plots=False ):
     science_images = np.loadtxt( stellar.science_images_list, dtype=str )
     nimages = len( science_images )
 
+
+    # Load the list of filenames that will be used to store
+    # the bad pixel output:
+    badpix_map_filenames = np.loadtxt( stellar.badpix_maps_list, dtype=str )
+    if len( badpix_map_filenames )!=nimages:
+        pdb.set_trace() # should be one bad pixel map per image
+
+    # If there is no goodbad array, assume all FITS files
+    # are okay:
     if stellar.goodbad==None:
-        stellar.goodbad = np.ones( [ nimages, stellar.n_exts ] )
+        stellar.goodbad = np.ones( nimages )
 
     # Open files that will store a list of
     # the trace file names:
-    science_traces_ofiles = []
+    science_traces_ofiles = [] # these are for what?
     stellar.science_traces_list = []
     if stellar.n_exts==1:
         for k in range( stellar.nstars ):
@@ -276,40 +286,56 @@ def fit_traces( stellar, make_plots=False ):
             stellar.science_traces_list += [ ext ]
     else:
         stellar.science_traces_list = []
-        for j in range( stellar.n_exts ):
-            science_traces_list_j = []
-            for k in range( stellar.nstars ):
-                ext = 'science_traces_{0}.lst'.format( stellar.star_names[j][k] )
+        science_traces_ofiles = []
+        for k in range( stellar.n_exts ):
+            science_traces_list_k = []
+            science_traces_ofiles_k = []
+            for i in range( stellar.nstars[k] ):
+                ext = 'science_traces_{0}.lst'.format( stellar.star_names[k][i] )
                 science_trace_ofilepath = os.path.join( stellar.adir, ext )
-                science_traces_ofiles += [ open( science_trace_ofilepath, 'w' ) ]
-                science_traces_list_j += [ ext ]
-            stellar.science_traces_list += [ science_traces_list_j ]
+                science_traces_ofiles_k += [ open( science_trace_ofilepath, 'w' ) ]
+                science_traces_list_k += [ ext ]
+            stellar.science_traces_list += [ science_traces_list_k ]
+            science_traces_ofiles += [ science_traces_ofiles_k ]
 
-
-    # Keep trace of the spectral trace fwhms across all images:
-    fwhms = np.zeros( [ nimages, stellar.nstars ] )
-
-    # Loop over the science images, fitting
-    # for the spectral traces:
+    # Loop over the science images, fitting the spectral traces:
     binw_disp = stellar.tracefit_kwargs['binw_disp']
+    fwhms = []
+    for k in range( stellar.n_exts ):
+        fwhms_k = []
+        if stellar.n_exts==1:
+            nstars_k = stellar.nstars
+        else:
+            nstars_k = stellar.nstars[k]
+        for i in range( nstars_k ):
+            fwhms_k += [ np.zeros( nimages ) ]
+        fwhms += [ fwhms_k ]
+
     for j in range( nimages ):
+
+        # First check if the current image has been
+        # flagged as bad:
+        if stellar.goodbad[j]==1:
+            print '\nFitting traces in image {0} of {1}'.format( j+1, nimages )
+        else:
+            print '\nImage {0} of {1} flagged as bad - skipping'.format( j+1, nimages )
+            continue
+
         t1=time.time()
-        # Load current image:
+        # Load current image and associated bad pixel map:
+        image_filename = science_images[j]
+        image_root = image_filename[:image_filename.rfind('.')]
+        image_filepath = os.path.join( stellar.ddir, image_filename )
+        image_hdu = fitsio.FITS( image_filepath )
+        badpix_map_filepath = os.path.join( stellar.ddir, badpix_map_filenames[j] )
+        badpix_hdu = fitsio.FITS( badpix_map_filepath )
+
+        # Loop over each FITS extension individually:
         for k in range( stellar.n_exts ):
 
-            if stellar.goodbad[j]==1:
-                print '\nFitting traces in image {0} of {1}'.format( j+1, nimages )
-            else:
-                print '\nImage {0} of {1} flagged as bad - skipping'.format( j+1, nimages )
-                continue
-            image_filename = science_images[j]
-            image_root = image_filename[:image_filename.rfind('.')]
-            image_filepath = os.path.join( stellar.ddir, image_filename )
-            image_hdu = fitsio.FITS( image_filepath )
-            darray = image_hdu[1].read()
-            badpix = image_hdu[2].read()
+            darray = image_hdu[k+1].read()
+            badpix = badpix_hdu[k+1].read()
             darray = np.ma.masked_array( darray, mask=badpix )
-            image_hdu.close()
 
             arr_dims = np.shape( darray )
             eps = 1e-8
@@ -328,15 +354,30 @@ def fit_traces( stellar, make_plots=False ):
             t = [] # interpolated trace fit along dispersion axis
             s = [] # cross-dispersion profile standard deviations
 
-            for k in range( stellar.nstars ):
+            if stellar.n_exts==1:
+                nstars_k = stellar.nstars
+            else:
+                nstars_k = stellar.nstars[k]
+            
+            for i in range( nstars_k ):
 
+                if stellar.n_exts==1:
+                    star_name_i = stellar.star_names[i]
+                    traces_ofile_i = science_traces_ofiles[i]
+                    crossdisp_bounds_i = stellar.crossdisp_bounds[i]
+                    disp_bounds_i = stellar.disp_bounds[i]
+                else:
+                    star_name_i = stellar.star_names[k][i]
+                    traces_ofile_i = science_traces_ofiles[k][i]
+                    crossdisp_bounds_i = stellar.crossdisp_bounds[k][i]
+                    disp_bounds_i = stellar.disp_bounds[k][i]
                 # Get the upper and lower edges of the window
                 # in the cross-dispersion range that contains
                 # the trace:
-                cl = stellar.crossdisp_bounds[k][0]
-                cu = stellar.crossdisp_bounds[k][1]
-                dl = stellar.disp_bounds[k][0]
-                du = stellar.disp_bounds[k][1]
+                cl = crossdisp_bounds_i[0]
+                cu = crossdisp_bounds_i[1]
+                dl = disp_bounds_i[0]
+                du = disp_bounds_i[1]
 
                 # Identify the rectangle containing the
                 # current spectrum:
@@ -354,7 +395,7 @@ def fit_traces( stellar, make_plots=False ):
                 ixs = ( bincents_disp>disp_pixs.min() )*( bincents_disp<disp_pixs.max() )
                 bincents_disp = bincents_disp[ixs]
                 nbins_disp = len( bincents_disp )
-
+                
                 # Extract the raw stellar spectrum:
                 if stellar.disp_axis==0:
                     spectrum = np.mean( darray[disp_ixs,:][:,crossdisp_ixs], axis=1 )
@@ -370,16 +411,16 @@ def fit_traces( stellar, make_plots=False ):
                 s_k = []
                 bincents_disp_good = []
                 trace_interps = [] #np.zeros( nbins_disp )
-                for i in range( nbins_disp ):
+                for v in range( nbins_disp ):
 
                     # Extract the cross-dispersion profile form 
                     # the current bin along the dispersion axis:
-                    dl_i = ledges[i]
-                    du_i = dl_i + binw_disp
+                    dl = ledges[v]
+                    du = dl + binw_disp
                     if stellar.disp_axis==0:
-                        binwindow = darray[dl_i:du_i,cl:cu+1]
+                        binwindow = darray[dl:du,cl:cu+1]
                     else:
-                        binwindow = darray[cl:cu+1,dl_i:du_i]
+                        binwindow = darray[cl:cu+1,dl:du]
 
                     nbad = binwindow.mask.sum()
                     ntot = binwindow.mask.size
@@ -388,20 +429,19 @@ def fit_traces( stellar, make_plots=False ):
                         print 'Too many bad pixels for bin - skipping'
                         continue
                     else:
-
                         if stellar.disp_axis==0:
-                            sky_rough_l = np.median( darray[dl_i:du_i,cl:cl+2] )
-                            sky_rough_u = np.median( darray[dl_i:du_i,cu-2:cu] )
+                            sky_rough_l = np.median( darray[dl:du,cl:cl+2] )
+                            sky_rough_u = np.median( darray[dl:du,cu-2:cu] )
                             sky_slope = ( sky_rough_u - sky_rough_l )/( cu-cl+1 )
                             sky_rough = sky_slope*np.arange( cu-cl+1 ) + sky_rough_l
-                            raw_flux = np.median( darray[dl_i:du_i,cl:cu+1], axis=0 )
+                            raw_flux = np.median( darray[dl:du,cl:cu+1], axis=0 )
                             crossdisp_prof = raw_flux - sky_rough
                         else:
-                            sky_rough_l = np.median( darray[cl:cl+2,dl_i:du_i].flatten() )
-                            sky_rough_u = np.median( darray[cu-2:cu,dl_i:du_i].flatten() )
+                            sky_rough_l = np.median( darray[cl:cl+2,dl:du].flatten() )
+                            sky_rough_u = np.median( darray[cu-2:cu,dl:du].flatten() )
                             sky_slope = ( sky_rough_u - sky_rough_l )/( cu-cl+1 )
                             sky_rough = sky_slope*np.arange( cu-cl+1 ) + sky_rough_l
-                            raw_flux = np.median( darray[cl:cu+1,dl_i:du_i], axis=1 )
+                            raw_flux = np.median( darray[cl:cu+1,dl:du], axis=1 )
                             crossdisp_prof = raw_flux - sky_rough
                     # Fit the cross-dispersion profile with a
                     # Gaussian using least squares:
@@ -422,9 +462,9 @@ def fit_traces( stellar, make_plots=False ):
                                                              pars0, \
                                                              args=( crossdisp_pixs, \
                                                                     crossdisp_prof ) )[0]
-                    A, B, C, sig, trace_interps_i = pars_optimised
-                    bincents_disp_good += [ bincents_disp[i] ]
-                    trace_interps += [ trace_interps_i ]
+                    A, B, C, sig, trace_interps_v = pars_optimised
+                    bincents_disp_good += [ bincents_disp[v] ]
+                    trace_interps += [ trace_interps_v ]
 
                     y_k += [ crossdisp_prof ]
                     g_k += [ gauss_profile( crossdisp_pixs, pars_optimised ) ]
@@ -433,9 +473,10 @@ def fit_traces( stellar, make_plots=False ):
                 ninterp = len( trace_interps )
                 if ninterp<2:
                     print 'Could not extract trace - skipping frame'
+                    pdb.set_trace()
                     continue
 
-                fwhms[j,k] = np.median( 2.355*np.array( s_k ) )
+                fwhm_jki = np.median( 2.355*np.array( s_k ) )
 
                 # Now that we've fit for the centres of each bin along the
                 # dispersion axis, we can interpolate these to a spectral
@@ -443,7 +484,7 @@ def fit_traces( stellar, make_plots=False ):
                 bincents_disp_good = np.array( bincents_disp_good )
                 trace_interps = np.array( trace_interps )
                 trace = np.zeros( npix_disp )
-
+                
                 if stellar.tracefit_kwargs['method']=='linear_interpolation':
 
                     # Create the interpolating function:
@@ -457,30 +498,8 @@ def fit_traces( stellar, make_plots=False ):
                     trace[ixs] = interpf( disp_pixs[ixs] )
 
                     # Linearly extrapolate at the edges:
-                    # NOTE: I loop over each element in the series here to avoid a
-                    # bizarre bug with numpy. In theory, it should be possible to
-                    # do this bit simply using: 
                     ixsl = disp_pixs<bincents_disp_good.min()
                     ixsu = disp_pixs>bincents_disp_good.max()
-                    # I have absolutely no idea why numpy seems to be making such a
-                    # trivial error, but hopefully it gets fixed in the future. It's
-                    # a pretty big concern, actually, because it could introduce subtle
-                    # problems to other parts of code. Anyway, the problem seems to
-                    # only occur for the macports installed version:
-                    #       py27-numpy @1.8.0_2+atlas+gcc45
-                    # whereas I don't get the same odd behaviour for v1.7 for instance.
-                    # So in the future it should be possible to revert the following
-                    # lines to the simpler version above, presumably.
-                    #ixsl = []
-                    #for w in range( len( disp_pixs ) ):
-                    #    if disp_pixs[w]<bincents_disp_good.min():
-                    #        ixsl += [ w ]
-                    #ixsl = np.array( ixsl )
-                    #ixsu = []
-                    #for w in range( len( disp_pixs ) ):
-                    #    if disp_pixs[w]>bincents_disp_good.max():
-                    #        ixsu += [ w ]
-                    #ixsu = np.array( ixsu )
 
                     trace[ixsl] = linear_extrapolation( disp_pixs[ixsl], \
                                                         bincents_disp_good[0:2], \
@@ -498,7 +517,7 @@ def fit_traces( stellar, make_plots=False ):
                 t += [ trace ]
 
                 # Save the trace centers for the current image to an output file:
-                ofolder_ext = 'trace_files/{0}'.format( stellar.star_names[k] )
+                ofolder_ext = 'trace_files/{0}'.format( star_name_i )
                 otracename = '{0}_nbins{1}.fits'.format( image_root, nbins_disp )
                 ofile_ext = os.path.join( ofolder_ext, otracename )
                 otrace_filepath = os.path.join( stellar.adir, ofile_ext )
@@ -513,13 +532,16 @@ def fit_traces( stellar, make_plots=False ):
                 data['TRACE'] = np.array( trace )
                 header = {}
                 header['METHOD'] = stellar.tracefit_kwargs['method']
-                header['FWHM'] = fwhms[j,k]
+                header['FWHM'] = fwhm_jki
                 header['IMAGE'] = image_filename
                 otrace.write( data, header=header )
                 otrace.close()
-                print ' ... saved trace fit {0}/{1:s}'.format( stellar.star_names[k], otracename )
-                science_traces_ofiles[k].write( '{0}\n'.format( ofile_ext ) )
+                print ' ... saved trace fit {0}/{1:s}'.format( star_name_i, otracename )
+                # and write to open file:
+                traces_ofile_i.write( '{0}\n'.format( ofile_ext ) )
 
+            # once all the stars had been cycled through.... would make a plot
+            # now will be edited to make a figure for each fits extension...
             if make_plots==True:
                 try:
                     tracedir = os.path.join( stellar.adir, 'trace_pngs' )
@@ -530,16 +552,16 @@ def fit_traces( stellar, make_plots=False ):
                     fig.suptitle( image_filename, fontsize=16 )
 
                     buff = 0.05
-                    nrows = stellar.nstars
-                    axh = ( 1. - nrows*buff )/float( nrows )
+                    nrows = nstars_k
+                    axh = ( 1. - nrows*buff - 2*buff )/float( nrows )
                     axw = ( 1. - 4*buff )/3.
                     xlow1 = 1.5*buff
                     xlow2 = xlow1 + axw + buff
                     xlow3 = xlow2 + axw + buff
-                    for k in range( stellar.nstars ):
-                        row_number = k%nrows + 1
+                    for i in range( nstars_k ):
+                        row_number = i%nrows + 1
                         ylow = 1. - buff - row_number*( axh + 0.5*buff )
-                        if k==0:
+                        if i==0:
                             axprof = fig.add_axes( [ xlow1, ylow, axw, axh ] )
                             axtr = fig.add_axes( [ xlow2, ylow, axw, axh ] )
                             axspec = fig.add_axes( [ xlow3, ylow, axw, axh ] )
@@ -549,487 +571,125 @@ def fit_traces( stellar, make_plots=False ):
                             axprof.set_title( 'cross-disp profile' )
                             axtr.set_title( 'trace fit' )
                             axspec.set_title( 'raw spectrum' )
-                            ymax = np.concatenate( y[k] ).max()
-                            specmax = spectra[k].max()
+                            ymax = np.concatenate( y[i] ).max()
+                            specmax = spectra[i].max()
                         else:
                             axprof = fig.add_axes( [ xlow1, ylow, axw, axh ], sharey=axprof0 )
                             axtr = fig.add_axes( [ xlow2, ylow, axw, axh ], sharey=axtr0 )
                             axspec = fig.add_axes( [ xlow3, ylow, axw, axh ], sharey=axspec0 )
-                        axprof.set_ylabel( '{0}'.format( stellar.star_names[k] ) )
-                        if k==stellar.nstars-1:
+                        axprof.set_ylabel( '{0}'.format( star_name_i ) )
+                        if i==nstars_k-1:
                             axprof.set_xlabel( 'cross-disp pixel coord' )
                             axtr.set_xlabel( 'disp pixel coord' )
                             axspec.set_xlabel( 'disp pixel coord' )
                         # Plot the raw stellar spectrum:
-                        axspec.plot( xd[k], spectra[k], '-k', lw=2 )
+                        axspec.plot( xd[i], spectra[i], '-k', lw=2 )
                         # Plot the cross-dispersion profile:
-                        for i in range( len( y[k] ) ):
-                            axprof.plot( xc[k], y[k][i], '-k', lw=2 )
-                            axprof.plot( xc[k], g[k][i], '-g', lw=1 )
-                        xlow = max( [ np.median( np.array( ti[k] ) - 15*np.array( s[k] ) ), \
-                                      stellar.crossdisp_bounds[k][0] ] )
-                        xupp = min( [ np.median( np.array( ti[k] ) + 15*np.array( s[k] ) ), \
-                                      stellar.crossdisp_bounds[k][1] ] )
+                        for v in range( len( y[i] ) ):
+                            axprof.plot( xc[i], y[i][v], '-k', lw=2 )
+                            axprof.plot( xc[i], g[i][v], '-g', lw=1 )
+                        xlow = max( [ np.median( np.array( ti[i] ) - 15*np.array( s[i] ) ), \
+                                      crossdisp_bounds_i[0] ] )
+                        xupp = min( [ np.median( np.array( ti[i] ) + 15*np.array( s[i] ) ), \
+                                      crossdisp_bounds_i[1] ] )
                         axprof.set_xlim( [ xlow, xupp ] )
-                        axprof.text( 0.05, 0.85, 'profile stdv = {0:.2f} pix'.format( np.median( s[k] ) ), \
+                        axprof.text( 0.05, 0.85, 'profile stdv = {0:.2f} pix'.format( np.median( s[i] ) ), \
                                      fontsize=8, horizontalalignment='left', transform=axprof.transAxes )
                         # Plot the trace fit:
-                        axtr.plot( xd[k], t[k] - np.median( t[k] ), '-r', lw=2 )
-                        axtr.plot( ci[k], ti[k] - np.median( t[k] ), 'o', mec='k', mfc='k', ms=7 )
-                        axtr.fill_between( xd[k], \
-                                           t[k] - np.median( t[k] ) - np.median( s[k] ), \
-                                           t[k] - np.median( t[k] ) + np.median( s[k] ), \
+                        axtr.plot( xd[i], t[i] - np.median( t[i] ), '-r', lw=2 )
+                        axtr.plot( ci[i], ti[i] - np.median( t[i] ), 'o', mec='k', mfc='k', ms=7 )
+                        axtr.fill_between( xd[i], \
+                                           t[i] - np.median( t[i] ) - np.median( s[i] ), \
+                                           t[i] - np.median( t[i] ) + np.median( s[i] ), \
                                            color=[0.8,0.8,0.8] )
                     axprof0.set_ylim( [ 0, 1.1*ymax ] )
                     axtr0.set_ylim( [ -10, +10 ] )
                     axspec0.set_ylim( [ 0, 1.1*specmax ] )
-                    ofigname = 'traces_{0}.png'.format( image_root )
+                    ofigname = 'traces_{0}_ext{1}.png'.format( image_root, k+1 )
                     ofigpath = os.path.join( tracedir, ofigname )
                     plt.savefig( ofigpath )
                     plt.close()
-                    print ' ... saved figure {0}'.format( ofigname )
+                    print ' ... saved figure: {0}'.format( ofigpath )
                 except:
                     print 'Unable to generate figure for {0} - skipping'.format( ofigname )
                     continue 
-            fwhms_str = ''
-            for k in range( stellar.nstars ):
-                fwhms_str += ' {0:.2f},'.format( fwhms[j,k] )
-            print 'PSF FWHMs (pixels) -', fwhms_str[:-1]
+            fwhm_str = ''
+            for i in range( nstars_k ):
+                fwhm_str += ' {0:.2f},'.format( fwhm_jki )
+            print 'PSF FWHMs (pixels) -', fwhm_str[:-1]
+            fwhms[k][i][j] = fwhm_jki
             t2=time.time()
             #print t2-t1
-
-    # Summarise the PSF FWHM info:
-    med = np.median( fwhms, axis=0 ) # median PSF FWHM for each star
-    std = np.std( fwhms, axis=0 ) # PSF FWHM scatter for each star
-    print '\nPSF FWHMs across all images in units of pixels'
-    print '# median, scatter'
-    plt.figure()
-    for k in range( stellar.nstars ):
-        print '{0} = {1:.3f}, {2:.3f}'.format( stellar.star_names[k], med[k], std[k] )
-        plt.plot( fwhms[:,k], '-', label='{0}'.format( stellar.star_names[k] ) )
-    plt.ylabel( 'PSF FWHM (pixels)' )
-    plt.xlabel( 'Image number' )
-    plt.legend()
-    ofigname = os.path.join( stellar.adir, 'psf_fwhms.png' )
-    plt.savefig( ofigname )
-    plt.close()
-    ofilename = os.path.join( stellar.adir, 'psf_fwhms.npy' )
-    np.savetxt( ofilename, fwhms )
-    m = np.median( fwhms, axis=1 ) # median PSF FWHM for each image
-    ix = np.argmax( m ) # image number with widest PSF
-    print '\nThe frame with the largest median PSF is:'
-    print science_images[ix]
-    print 'with PSF FWHM of {0:.3f} pixels'.format( m[ix] )
-    z = np.std( fwhms, axis=1 ) # spread amongst stars per image
-    
-    print '\nSaved list of traces for each star in:'
-    for k in range( stellar.nstars ):
-        science_traces_ofiles[k].close()
-        ofilename = os.path.basename( stellar.science_traces_list[k] )
-        print '{0} --> {1}'.format( stellar.star_names[k], ofilename )
-    print '\nSaved PSF FWHMs for each star in each frame in:\n{0}'\
-          .format( ofilename )
-    print 'Saved corresponding figure:\n{0}'.format( ofigname )
-    plt.ion()
-
-    return None
-
-def fit_traces_BACKUP( stellar, make_plots=False ):
-    """
-    Creates files containing the fitted (linear) traces to each of the
-    science images. These files contain three columns:
-    (1) an integer index specifying the star
-    (2) a column containing the dispersion axis pixel coordinates
-    (3) a column containing the corresponding cross-dispersion
-        pixel coordinates.
-    All of these trace files are saved in a specific location (see code
-    below) and a file containing a list of all these trace files is
-    also created.
-    
-    
-    To-do:
-    - perhaps return the fit values for the trace widths at
-      each interpolant; but maybe it's better to keep the output
-      simple and only print this information to screen, because
-      you should already have a good idea of the width of the
-      spatial profile from the inspect_images routines with the
-      fully integrated spatial profile.
-    """
-
-    plt.ioff()
-    #plt.ion()
-    
-    # Read in the science images:
-    science_images = np.loadtxt( stellar.science_images_list, dtype=str )
-    nimages = len( science_images )
-
-    if stellar.goodbad==None:
-        stellar.goodbad = np.ones( nimages )
-
-    # Open files that will store a list of
-    # the trace file names:
-    science_traces_ofiles = []
-    stellar.science_traces_list = []
-    if stellar.n_exts==1:
-        for k in range( stellar.nstars ):
-            ext = 'science_traces_{0}.lst'.format( stellar.star_names[k] )
-            science_trace_ofilepath = os.path.join( stellar.adir, ext )
-            science_traces_ofiles += [ open( science_trace_ofilepath, 'w' ) ]
-            stellar.science_traces_list += [ ext ]
-    else:
-        for j in range( stellar.n_exts ):
-            for k in range( stellar.nstars ):
-                ext = 'science_traces_{0}.lst'.format( stellar.star_names[j][k] )
-                science_trace_ofilepath = os.path.join( stellar.adir, ext )
-                science_traces_ofiles += [ open( science_trace_ofilepath, 'w' ) ]
-                stellar.science_traces_list += [ ext ]
-
-
-    # Keep trace of the spectral trace fwhms across all images:
-    fwhms = np.zeros( [ nimages, stellar.nstars ] )
-
-    # Loop over the science images, fitting
-    # for the spectral traces:
-    binw_disp = stellar.tracefit_kwargs['binw_disp']
-    for j in range( nimages ):
-        t1=time.time()
-        # Load current image and measure dimensions:
-        if stellar.goodbad[j]==1:
-            print '\nFitting traces in image {0} of {1}'.format( j+1, nimages )
-        else:
-            print '\nImage {0} of {1} flagged as bad - skipping'.format( j+1, nimages )
-            continue
-        image_filename = science_images[j]
-        image_root = image_filename[:image_filename.rfind('.')]
-        image_filepath = os.path.join( stellar.ddir, image_filename )
-        image_hdu = fitsio.FITS( image_filepath )
-        darray = image_hdu[1].read()
-        badpix = image_hdu[2].read()
-        darray = np.ma.masked_array( darray, mask=badpix )
+        # Having looped over all extensions 
+        # in the current HDU, close it:
         image_hdu.close()
 
-        arr_dims = np.shape( darray )
-        eps = 1e-8
-        disp_pixrange = np.arange( arr_dims[stellar.disp_axis] + eps )
-        crossdisp_pixrange = np.arange( arr_dims[stellar.crossdisp_axis] + eps )
-
-        # These lists will be used to store arrays for
-        # plotting the cross-dispersion profiles:
-        spectra = [] # raw spectra for each star
-        xc = [] # cross-dispersion pixels
-        xd = [] # dispersion pixels        
-        y = [] # cross-dispersion profiles
-        g = [] # gaussian profile fits
-        ti = [] # trace knot interpolants along dispersion axis
-        ci = [] # cross-dispersion profile center interpolants
-        t = [] # interpolated trace fit along dispersion axis
-        s = [] # cross-dispersion profile standard deviations
-
-        for k in range( stellar.nstars ):
-
-            # Get the upper and lower edges of the window
-            # in the cross-dispersion range that contains
-            # the trace:
-            cl = stellar.crossdisp_bounds[k][0]
-            cu = stellar.crossdisp_bounds[k][1]
-            dl = stellar.disp_bounds[k][0]
-            du = stellar.disp_bounds[k][1]
-            
-            # Identify the rectangle containing the
-            # current spectrum:
-            crossdisp_ixs = ( crossdisp_pixrange>=cl )*( crossdisp_pixrange<=cu )
-            crossdisp_pixs = crossdisp_pixrange[crossdisp_ixs]
-            disp_ixs = ( disp_pixrange>=dl )*( disp_pixrange<=du )
-            disp_pixs = disp_pixrange[disp_ixs]
-            npix_disp = len( disp_pixs )
-            xc += [ crossdisp_pixs ]
-            xd += [ disp_pixs ]
-
-            # Generate bins along the dispersion axis:
-            ledges = np.arange( disp_pixs[0], disp_pixs[-1], binw_disp )
-            bincents_disp = ledges + 0.5*binw_disp
-            ixs = ( bincents_disp>disp_pixs.min() )*( bincents_disp<disp_pixs.max() )
-            bincents_disp = bincents_disp[ixs]
-            nbins_disp = len( bincents_disp )
-
-            # Extract the raw stellar spectrum:
-            if stellar.disp_axis==0:
-                spectrum = np.mean( darray[disp_ixs,:][:,crossdisp_ixs], axis=1 )
-            else:
-                spectrum = np.mean( darray[:,disp_ixs][crossdisp_ixs,:], axis=0 )
-            spectrum_amp = spectrum.max() - spectrum.min()
-            spectra += [ spectrum ]
-
-            # Fit Gaussians to each cross-dispersion
-            # profile for the current star:
-            y_k = []
-            g_k = []
-            s_k = []
-            bincents_disp_good = []
-            trace_interps = [] #np.zeros( nbins_disp )
-            for i in range( nbins_disp ):
-
-                # Extract the cross-dispersion profile form 
-                # the current bin along the dispersion axis:
-                dl_i = ledges[i]
-                du_i = dl_i + binw_disp
-                if stellar.disp_axis==0:
-                    binwindow = darray[dl_i:du_i,cl:cu+1]
-                else:
-                    binwindow = darray[cl:cu+1,dl_i:du_i]
-
-                nbad = binwindow.mask.sum()
-                ntot = binwindow.mask.size
-                frac_bad = float( nbad )/ntot
-                if frac_bad>0.2:
-                    print 'Too many bad pixels for bin - skipping'
-                    continue
-                else:
-
-                    if stellar.disp_axis==0:
-                        sky_rough_l = np.median( darray[dl_i:du_i,cl:cl+2] )
-                        sky_rough_u = np.median( darray[dl_i:du_i,cu-2:cu] )
-                        sky_slope = ( sky_rough_u - sky_rough_l )/( cu-cl+1 )
-                        sky_rough = sky_slope*np.arange( cu-cl+1 ) + sky_rough_l
-                        raw_flux = np.median( darray[dl_i:du_i,cl:cu+1], axis=0 )
-                        crossdisp_prof = raw_flux - sky_rough
-                    else:
-                        sky_rough_l = np.median( darray[cl:cl+2,dl_i:du_i].flatten() )
-                        sky_rough_u = np.median( darray[cu-2:cu,dl_i:du_i].flatten() )
-                        sky_slope = ( sky_rough_u - sky_rough_l )/( cu-cl+1 )
-                        sky_rough = sky_slope*np.arange( cu-cl+1 ) + sky_rough_l
-                        raw_flux = np.median( darray[cl:cu+1,dl_i:du_i], axis=1 )
-                        crossdisp_prof = raw_flux - sky_rough
-                # Fit the cross-dispersion profile with a
-                # Gaussian using least squares:
-                A0 = crossdisp_prof.min()
-                B0 = 0.
-                C0 = np.max( crossdisp_prof ) - A0
-                crossdisp_prof_downshift = crossdisp_prof - A0 - 0.8*C0
-                ixs = ( crossdisp_prof_downshift.data>0 )
-                if ixs.sum()>2:
-                    pixs = crossdisp_pixs[ixs]
-                    sig0 = 0.3*( pixs.max() - pixs.min() )
-                else:
-                    sig0 = 0.1*len( crossdisp_pixs )
-                ix = np.argmax( crossdisp_prof )
-                crossdisp_coord0 = crossdisp_pixs[ix]
-                pars0 = np.array( [ A0, B0, C0, sig0, crossdisp_coord0 ] )
-                pars_optimised = scipy.optimize.leastsq( gauss_resids, \
-                                                         pars0, \
-                                                         args=( crossdisp_pixs, \
-                                                                crossdisp_prof ) )[0]
-                A, B, C, sig, trace_interps_i = pars_optimised
-                bincents_disp_good += [ bincents_disp[i] ]
-                trace_interps += [ trace_interps_i ]
-
-                y_k += [ crossdisp_prof ]
-                g_k += [ gauss_profile( crossdisp_pixs, pars_optimised ) ]
-                s_k += [ abs( sig ) ]
-
-            ninterp = len( trace_interps )
-            if ninterp<2:
-                print 'Could not extract trace - skipping frame'
-                continue
-
-            fwhms[j,k] = np.median( 2.355*np.array( s_k ) )
-            
-            # Now that we've fit for the centres of each bin along the
-            # dispersion axis, we can interpolate these to a spectral
-            # trace evaluated at each pixel along the dispersion axis:
-            bincents_disp_good = np.array( bincents_disp_good )
-            trace_interps = np.array( trace_interps )
-            trace = np.zeros( npix_disp )
-
-            if stellar.tracefit_kwargs['method']=='linear_interpolation':
-
-                # Create the interpolating function:
-                interpf = scipy.interpolate.interp1d( bincents_disp_good, \
-                                                      trace_interps, \
-                                                      kind='linear' )
-
-                # Interpolate between the bin centers:
-                ixs = ( ( disp_pixs>=bincents_disp_good.min() )\
-                        *( disp_pixs<=bincents_disp_good.max() ) )
-                trace[ixs] = interpf( disp_pixs[ixs] )
-
-                # Linearly extrapolate at the edges:
-                # NOTE: I loop over each element in the series here to avoid a
-                # bizarre bug with numpy. In theory, it should be possible to
-                # do this bit simply using: 
-                ixsl = disp_pixs<bincents_disp_good.min()
-                ixsu = disp_pixs>bincents_disp_good.max()
-                # I have absolutely no idea why numpy seems to be making such a
-                # trivial error, but hopefully it gets fixed in the future. It's
-                # a pretty big concern, actually, because it could introduce subtle
-                # problems to other parts of code. Anyway, the problem seems to
-                # only occur for the macports installed version:
-                #       py27-numpy @1.8.0_2+atlas+gcc45
-                # whereas I don't get the same odd behaviour for v1.7 for instance.
-                # So in the future it should be possible to revert the following
-                # lines to the simpler version above, presumably.
-                #ixsl = []
-                #for w in range( len( disp_pixs ) ):
-                #    if disp_pixs[w]<bincents_disp_good.min():
-                #        ixsl += [ w ]
-                #ixsl = np.array( ixsl )
-                #ixsu = []
-                #for w in range( len( disp_pixs ) ):
-                #    if disp_pixs[w]>bincents_disp_good.max():
-                #        ixsu += [ w ]
-                #ixsu = np.array( ixsu )
-                
-                trace[ixsl] = linear_extrapolation( disp_pixs[ixsl], \
-                                                    bincents_disp_good[0:2], \
-                                                    trace_interps[0:2] )
-                trace[ixsu] = linear_extrapolation( disp_pixs[ixsu], \
-                                                    bincents_disp_good[-2:], \
-                                                    trace_interps[-2:] )
-            else:
-                pdb.set_trace() # haven't implemented any other methods yet
-            y += [ y_k ]
-            g += [ g_k ]
-            s += [ s_k ]
-            ci += [ bincents_disp_good ]
-            ti += [ trace_interps ]
-            t += [ trace ]
-
-            # Save the trace centers for the current image to an output file:
-            ofolder_ext = 'trace_files/{0}'.format( stellar.star_names[k] )
-            otracename = '{0}_nbins{1}.fits'.format( image_root, nbins_disp )
-            ofile_ext = os.path.join( ofolder_ext, otracename )
-            otrace_filepath = os.path.join( stellar.adir, ofile_ext )
-            if os.path.isdir( os.path.dirname( otrace_filepath ) )!=True:
-                os.makedirs( os.path.dirname( otrace_filepath ) )
-            if os.path.isfile( otrace_filepath ):
-                os.remove( otrace_filepath )
-            otrace = fitsio.FITS( otrace_filepath, 'rw' )
-            data = np.zeros( npix_disp, dtype=[ ( 'DISPPIXS', np.float64 ), \
-                                                ( 'TRACE', np.float64 ) ] )
-            data['DISPPIXS'] = disp_pixs
-            data['TRACE'] = np.array( trace )
-            header = {}
-            header['METHOD'] = stellar.tracefit_kwargs['method']
-            header['FWHM'] = fwhms[j,k]
-            header['IMAGE'] = image_filename
-            otrace.write( data, header=header )
-            otrace.close()
-            print ' ... saved trace fit {0}/{1:s}'.format( stellar.star_names[k], otracename )
-            science_traces_ofiles[k].write( '{0}\n'.format( ofile_ext ) )
-
-        if make_plots==True:
-            try:
-                tracedir = os.path.join( stellar.adir, 'trace_pngs' )
-                if os.path.isdir( tracedir )!=True:
-                    os.makedirs( tracedir )
-
-                fig = plt.figure( figsize = [ 15, 11 ] )
-                fig.suptitle( image_filename, fontsize=16 )
-
-                buff = 0.05
-                nrows = stellar.nstars
-                axh = ( 1. - nrows*buff )/float( nrows )
-                axw = ( 1. - 4*buff )/3.
-                xlow1 = 1.5*buff
-                xlow2 = xlow1 + axw + buff
-                xlow3 = xlow2 + axw + buff
-                for k in range( stellar.nstars ):
-                    row_number = k%nrows + 1
-                    ylow = 1. - buff - row_number*( axh + 0.5*buff )
-                    if k==0:
-                        axprof = fig.add_axes( [ xlow1, ylow, axw, axh ] )
-                        axtr = fig.add_axes( [ xlow2, ylow, axw, axh ] )
-                        axspec = fig.add_axes( [ xlow3, ylow, axw, axh ] )
-                        axspec0 = axspec
-                        axprof0 = axprof
-                        axtr0 = axtr
-                        axprof.set_title( 'cross-disp profile' )
-                        axtr.set_title( 'trace fit' )
-                        axspec.set_title( 'raw spectrum' )
-                        ymax = np.concatenate( y[k] ).max()
-                        specmax = spectra[k].max()
-                    else:
-                        axprof = fig.add_axes( [ xlow1, ylow, axw, axh ], sharey=axprof0 )
-                        axtr = fig.add_axes( [ xlow2, ylow, axw, axh ], sharey=axtr0 )
-                        axspec = fig.add_axes( [ xlow3, ylow, axw, axh ], sharey=axspec0 )
-                    axprof.set_ylabel( '{0}'.format( stellar.star_names[k] ) )
-                    if k==stellar.nstars-1:
-                        axprof.set_xlabel( 'cross-disp pixel coord' )
-                        axtr.set_xlabel( 'disp pixel coord' )
-                        axspec.set_xlabel( 'disp pixel coord' )
-                    # Plot the raw stellar spectrum:
-                    axspec.plot( xd[k], spectra[k], '-k', lw=2 )
-                    # Plot the cross-dispersion profile:
-                    for i in range( len( y[k] ) ):
-                        axprof.plot( xc[k], y[k][i], '-k', lw=2 )
-                        axprof.plot( xc[k], g[k][i], '-g', lw=1 )
-                    xlow = max( [ np.median( np.array( ti[k] ) - 15*np.array( s[k] ) ), \
-                                  stellar.crossdisp_bounds[k][0] ] )
-                    xupp = min( [ np.median( np.array( ti[k] ) + 15*np.array( s[k] ) ), \
-                                  stellar.crossdisp_bounds[k][1] ] )
-                    axprof.set_xlim( [ xlow, xupp ] )
-                    axprof.text( 0.05, 0.85, 'profile stdv = {0:.2f} pix'.format( np.median( s[k] ) ), \
-                                 fontsize=8, horizontalalignment='left', transform=axprof.transAxes )
-                    # Plot the trace fit:
-                    axtr.plot( xd[k], t[k] - np.median( t[k] ), '-r', lw=2 )
-                    axtr.plot( ci[k], ti[k] - np.median( t[k] ), 'o', mec='k', mfc='k', ms=7 )
-                    axtr.fill_between( xd[k], \
-                                       t[k] - np.median( t[k] ) - np.median( s[k] ), \
-                                       t[k] - np.median( t[k] ) + np.median( s[k] ), \
-                                       color=[0.8,0.8,0.8] )
-                axprof0.set_ylim( [ 0, 1.1*ymax ] )
-                axtr0.set_ylim( [ -10, +10 ] )
-                axspec0.set_ylim( [ 0, 1.1*specmax ] )
-                ofigname = 'traces_{0}.png'.format( image_root )
-                ofigpath = os.path.join( tracedir, ofigname )
-                plt.savefig( ofigpath )
-                plt.close()
-                print ' ... saved figure {0}'.format( ofigname )
-            except:
-                print 'Unable to generate figure for {0} - skipping'.format( ofigname )
-                continue 
-        fwhms_str = ''
-        for k in range( stellar.nstars ):
-            fwhms_str += ' {0:.2f},'.format( fwhms[j,k] )
-        print 'PSF FWHMs (pixels) -', fwhms_str[:-1]
-        t2=time.time()
-        #print t2-t1
-
     # Summarise the PSF FWHM info:
-    med = np.median( fwhms, axis=0 ) # median PSF FWHM for each star
-    std = np.std( fwhms, axis=0 ) # PSF FWHM scatter for each star
+    #med = np.median( fwhms, axis=0 ) # median PSF FWHM for each star
+    #std = np.std( fwhms, axis=0 ) # PSF FWHM scatter for each star
     print '\nPSF FWHMs across all images in units of pixels'
     print '# median, scatter'
     plt.figure()
-    for k in range( stellar.nstars ):
-        print '{0} = {1:.3f}, {2:.3f}'.format( stellar.star_names[k], med[k], std[k] )
-        plt.plot( fwhms[:,k], '-', label='{0}'.format( stellar.star_names[k] ) )
+    fwhm_med_arrs = []
+    for k in range( stellar.n_exts ):
+        if stellar.n_exts==1:
+            nstars_k = stellar.nstars
+        else:
+            nstars_k = stellar.nstars[k]
+        fwhm_arr_k = np.zeros( [ nimages, nstars_k ] )
+        for i in range( nstars_k ):
+            fwhm_arr_k[:,i] = fwhms[k][i]
+            # Statistics accross all nights
+            med = np.median( fwhms[k][i] )
+            std = np.std( fwhms[k][i] )
+            if stellar.n_exts==1:
+                star_name = stellar.star_names[i]
+            else:
+                star_name = stellar.star_names[k][i]
+            print '{0} = {1:.3f}, {2:.3f}'.format( star_name, med, std )
+            plt.plot( fwhms[k][i], '-', label='{0}'.format( star_name ) )
+        fwhm_med_arrs += [ np.median( fwhm_arr_k, axis=1 ) ]
+    fwhm_med_arrs = np.column_stack( fwhm_med_arrs )
+
     plt.ylabel( 'PSF FWHM (pixels)' )
     plt.xlabel( 'Image number' )
     plt.legend()
-    ofigname = os.path.join( stellar.adir, 'psf_fwhms.png' )
-    plt.savefig( ofigname )
+    ofigpath = os.path.join( stellar.adir, 'psf_fwhms.png' )
+    plt.savefig( ofigpath )
     plt.close()
-    ofilename = os.path.join( stellar.adir, 'psf_fwhms.npy' )
-    np.savetxt( ofilename, fwhms )
-    m = np.median( fwhms, axis=1 ) # median PSF FWHM for each image
+    ofilepath = os.path.join( stellar.adir, 'psf_fwhms.pkl' )
+    #np.savetxt( ofilepath, fwhms )
+    ofile = open( ofilepath, 'w' )
+    cPickle.dump( fwhms, ofile )
+    ofile.close()
+
+    m = np.median( fwhm_med_arrs, axis=1 ) # median PSF FWHM for each image
     ix = np.argmax( m ) # image number with widest PSF
-    print '\nThe frame with the largest median PSF is:'
-    print science_images[ix]
+    print '\nThe frame with the largest median PSF is:\nImage {0} of {1} ({2}'\
+          .format( ix+1, nimages, science_images[ix] )
     print 'with PSF FWHM of {0:.3f} pixels'.format( m[ix] )
-    z = np.std( fwhms, axis=1 ) # spread amongst stars per image
+    z = np.std( fwhm_med_arrs, axis=1 ) # spread amongst stars per image
     
-    print '\nSaved list of traces for each star in:'
-    for k in range( stellar.nstars ):
-        science_traces_ofiles[k].close()
-        ofilename = os.path.basename( stellar.science_traces_list[k] )
-        print '{0} --> {1}'.format( stellar.star_names[k], ofilename )
     print '\nSaved PSF FWHMs for each star in each frame in:\n{0}'\
-          .format( ofilename )
-    print 'Saved corresponding figure:\n{0}'.format( ofigname )
+          .format( ofilepath )
+    print 'Saved corresponding figure:\n{0}'.format( ofigpath )
+
+    print '\nSaved list of traces for each star in:'
+    if stellar.n_exts==1:
+        for i in range( stellar.nstars ):
+            science_traces_ofiles[i].close()
+            ofilepath = os.path.join( stellar.adir, stellar.science_traces_list[i] )
+            print '{0} --> {1}'.format( stellar.star_names[i], ofilename )
+    else:
+        for k in range( stellar.n_exts ):
+            for i in range( stellar.nstars[k] ):
+                science_traces_ofiles[k][i].close()
+                ofilepath = os.path.join( stellar.adir, stellar.science_traces_list[k][i] )
+                print '{0} --> {1}'.format( stellar.star_names[k][i], ofilepath )
     plt.ion()
 
     return None
+
 
 
 def extract_spectra( stellar ):
