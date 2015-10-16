@@ -43,10 +43,10 @@ class stellar():
 
         return None
 
-    def identify_badpixels( self ):
+    def identify_bad_pixels( self ):
         """
         """
-        stellar_routines.identify_badpixels( self )
+        stellar_routines.identify_bad_pixels( self )
         return None
 
     def fit_traces( self, make_plots=False ):
