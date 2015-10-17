@@ -296,9 +296,10 @@ def fit_traces( stellar, make_plots=False ):
             science_traces_ofiles += [ open( science_trace_ofilepath, 'w' ) ]
             #stellar.science_traces_list += [ ext ]
             #ext = 'science_images_{0}.lst'.format( stellar.star_names[i] )
-        science_image_ofilepath = os.path.join( stellar.adir, stellar.science_images_list )
-        science_images_ofile = open( science_image_ofilepath, 'w' )
-        badpix_maps_ofile = open( badpix_maps_ofilepath, 'w' )
+        #science_image_ofilepath = os.path.join( stellar.adir, stellar.science_images_list )
+        #science_images_ofile = open( science_image_ofilepath, 'w' )
+        #badpix_maps_ofilepath = os.path.join( stellar.adir, stellar.science_images_list )
+        #badpix_maps_ofile = open( badpix_maps_ofilepath, 'w' )
     else:
         #stellar.science_traces_list = []
         #stellar.science_images_list = []
@@ -802,20 +803,22 @@ def extract_spectra( stellar ):
             if stellar.n_exts==1:
                 nstars_k = stellar.nstars
                 science_traces_list_k = science_traces_lists
-                science_spectra_list_k = stellar.science_spectra_list
+                #science_spectra_list_k = stellar.science_spectra_list
+                science_spectra_lists_ofile_k = science_spectra_lists_ofiles
                 star_names_k = stellar.star_names
                 disp_bounds_k = stellar.disp_bounds
                 crossdisp_bounds_k = stellar.crossdisp_bounds
             else:
                 nstars_k = stellar.nstars[k]
                 science_traces_list_k = science_traces_lists[k]
-                science_spectra_list_k = stellar.science_spectra_list[k]
+                #science_spectra_list_k = stellar.science_spectra_list[k]
+                science_spectra_lists_ofile_k = science_spectra_lists_ofiles[k]
                 star_names_k = stellar.star_names[k]            
                 disp_bounds_k = stellar.disp_bounds[k]
                 crossdisp_bounds_k = stellar.crossdisp_bounds[k]
             
             for i in range( nstars_k ):
-                science_spectra_list_ofile_ki = science_spectra_lists_ofiles[k][i]
+                science_spectra_list_ofile_ki = science_spectra_lists_ofile_k[i]
                 if np.ndim( science_traces_list_k )==0:
                     science_traces_list_ki = science_traces_list_k
                     #science_spectra_list_opath = os.path.join( stellar.adir, science_spectra_list_k )
