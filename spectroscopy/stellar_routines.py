@@ -905,7 +905,7 @@ def extract_spectra( stellar ):
                 # Loop over each pixel column along the dispersion axis
                 # to extract the spectrum:
                 for v in range( npix_disp ):
-
+                    
                     crossdisp_central_pix = trarray[v]
                     if stellar.disp_axis==0:
                         crossdisp_row = subarray[v,:]
@@ -922,7 +922,7 @@ def extract_spectra( stellar ):
                         print '\nProblem with trace fit for dispersion column {0} of {1}'\
                               .format( disp_pixs[v], os.path.basename( image_filepath ) )
                         print '(may be worth inspecting the corresponding image)\n'
-                        break
+                        continue # to next column...
 
                     # Determine the pixels that are fully
                     # contained within the spectral aperture:
@@ -1034,7 +1034,6 @@ def extract_spectra( stellar ):
                                 + darray_fracupper \
                                 - sky
                     nappixs[v] = npix_full + nfracpix_u + nfracpix_l
-                    #pdb.set_trace()
                     skyppix[v] = sky/float( nappixs[v] )
 
                 # Save the spectra for the current star in the current
@@ -1059,6 +1058,12 @@ def extract_spectra( stellar ):
                     os.makedirs( ofolder )
                 if os.path.isfile( ospec_filepath ):
                     os.remove( ospec_filepath )
+                #plt.ion()
+                #plt.close('all')
+                #plt.figure()
+                #plt.plot(apflux,'-b')
+                #plt.title(i)
+                #pdb.set_trace()
                 fits = fitsio.FITS( ospec_filepath, 'rw' )
                 #trace_filename = os.path.basename( trace_files_k[i] )
                 header = { 'IMAGE':image_filename, 'TRACE':science_traces_list_ki[j], 'FWHM':fwhm_ki }
