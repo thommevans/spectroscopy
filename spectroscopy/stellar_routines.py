@@ -198,7 +198,7 @@ def identify_bad_pixels( stellar ):
                     sig_sub = np.std( subslider[:,:,ixs_use], axis=2 )
                     delsigmas_sub = abs( ( subdarray - med_sub )/sig_sub )
                     ixs_bad = ( delsigmas_sub>nsigma_thresh )
-                    print 'Max outlier  = {0:.2f} sigma'.format( desigmas_sub.max() )
+                    print 'Max outlier  = {0:.2f} sigma'.format( delsigmas_sub.max() )
                     frac_bad = ixs_bad.sum()/float( ixs_bad.size )
                     if ( frac_bad>1e-3 )*( i<niterations-1 ):
                             untainted_frames[j] = 0
