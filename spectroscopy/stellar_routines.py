@@ -327,6 +327,8 @@ def fit_traces( stellar, make_plots=False ):
     badpix_maps_ofilepath = os.path.join( stellar.adir, stellar.badpix_maps_list )
     badpix_maps_ofile = open( badpix_maps_ofilepath, 'w' )
 
+    #nimages=5#delete
+    #stellar.goodbad=np.ones(nimages)#delete
     # Loop over the science images, fitting the spectral traces:
     binw_disp = stellar.tracefit_kwargs['binw_disp']
     fwhms = []
@@ -354,8 +356,6 @@ def fit_traces( stellar, make_plots=False ):
         # Load current image and associated bad pixel map:
         image_filename = science_images_full[j]
         badpix_map_filename = badpix_maps_full[j]
-        science_images_ofile.write( '{0}\n'.format( image_filename ) ) 
-        badpix_maps_ofile.write( '{0}\n'.format( badpix_map_filename ) ) 
         image_root = image_filename[:image_filename.rfind('.')]
         image_filepath = os.path.join( stellar.ddir, image_filename )
         image_hdu = fitsio.FITS( image_filepath )
@@ -390,9 +390,8 @@ def fit_traces( stellar, make_plots=False ):
                 nstars_k = stellar.nstars
             else:
                 nstars_k = stellar.nstars[k]
-            
-            for i in range( nstars_k ):
 
+            for i in range( nstars_k ):
                 if stellar.n_exts==1:
                     star_name_i = stellar.star_names[i]
                     traces_ofile_i = science_traces_ofiles[i]
@@ -507,10 +506,11 @@ def fit_traces( stellar, make_plots=False ):
                 ninterp = len( trace_interps )
                 if ninterp<2:
                     print 'Could not extract trace - skipping frame'
-                    pdb.set_trace()
+                    stellar.goodbad[j] = 0
                     continue
 
                 fwhm_jki = np.median( 2.355*np.array( s_k ) )
+                
 
                 # Now that we've fit for the centres of each bin along the
                 # dispersion axis, we can interpolate these to a spectral
@@ -574,9 +574,16 @@ def fit_traces( stellar, make_plots=False ):
                 # and write to open file:
                 traces_ofile_i.write( '{0}\n'.format( ofile_ext ) )
                 #images_ofile_i.write( '{0}\n'.format( image_filename ) )
+                #badpix_maps_ofile_i.write( '{0}\n'.format( image_filename ) )
 
+                print 'PSF FWHMs - {0:.2f} pixels'.format( fwhm_jki )#fwhm_str[:-1] )
+                fwhms[k][i][j] = fwhm_jki
+
+            t2=time.time()
+            #print t2-t1
             # once all the stars had been cycled through.... would make a plot
             # now will be edited to make a figure for each fits extension...
+            #if ( min( successes )==True )*( make_plots==True ):
             if make_plots==True:
                 try:
                     tracedir = os.path.join( stellar.adir, 'trace_pngs' )
@@ -594,6 +601,14 @@ def fit_traces( stellar, make_plots=False ):
                     xlow2 = xlow1 + axw + buff
                     xlow3 = xlow2 + axw + buff
                     for i in range( nstars_k ):
+                        if stellar.n_exts==1:
+                            star_name_i = stellar.star_names[i]
+                            traces_ofile_i = science_traces_ofiles[i]
+                            #images_ofile_i = science_images_ofiles[i]
+                            crossdisp_bounds_i = stellar.crossdisp_bounds[i]
+                            disp_bounds_i = stellar.disp_bounds[i]
+                        else:
+                            star_name_i = stellar.star_names[k][i]
                         row_number = i%nrows + 1
                         ylow = 1. - buff - row_number*( axh + 0.5*buff )
                         if i==0:
@@ -646,19 +661,16 @@ def fit_traces( stellar, make_plots=False ):
                     plt.close()
                     print ' ... saved figure: {0}'.format( ofigpath )
                 except:
-                    print 'Unable to generate figure for {0} - skipping'.format( ofigname )
+                    print 'Unable to generate figure for {0} - skipping'.format( image_filename )
                     continue 
-            fwhm_str = ''
-            for i in range( nstars_k ):
-                fwhm_str += ' {0:.2f},'.format( fwhm_jki )
-            print 'PSF FWHMs (pixels) -', fwhm_str[:-1]
-            fwhms[k][i][j] = fwhm_jki
-            t2=time.time()
-            #print t2-t1
         # Having looped over all extensions 
         # in the current HDU, close it:
         image_hdu.close()
-
+        # If all of the trace fits were successful, make a
+        # record of the badpixel map and image:
+        if stellar.goodbad[j]==1:
+            science_images_ofile.write( '{0}\n'.format( image_filename ) ) 
+            badpix_maps_ofile.write( '{0}\n'.format( badpix_map_filename ) ) 
     # Summarise the PSF FWHM info:
     #med = np.median( fwhms, axis=0 ) # median PSF FWHM for each star
     #std = np.std( fwhms, axis=0 ) # PSF FWHM scatter for each star
@@ -666,25 +678,28 @@ def fit_traces( stellar, make_plots=False ):
     print '# median, scatter'
     plt.figure()
     fwhm_med_arrs = []
+    ixs = stellar.goodbad==1
+    nimages_good = int( ixs.sum() )
     for k in range( stellar.n_exts ):
         if stellar.n_exts==1:
             nstars_k = stellar.nstars
         else:
             nstars_k = stellar.nstars[k]
-        fwhm_arr_k = np.zeros( [ nimages, nstars_k ] )
+        fwhm_arr_k = np.zeros( [ nimages_good, nstars_k ] )
         for i in range( nstars_k ):
-            fwhm_arr_k[:,i] = fwhms[k][i]
+            fwhm_arr_k[:,i] = fwhms[k][i][ixs]
             # Statistics accross all nights
-            med = np.median( fwhms[k][i] )
-            std = np.std( fwhms[k][i] )
+            med = np.median( fwhms[k][i][ixs] )
+            std = np.std( fwhms[k][i][ixs] )
             if stellar.n_exts==1:
                 star_name = stellar.star_names[i]
             else:
                 star_name = stellar.star_names[k][i]
             print '{0} = {1:.3f}, {2:.3f}'.format( star_name, med, std )
-            plt.plot( fwhms[k][i], '-', label='{0}'.format( star_name ) )
+            plt.plot( fwhms[k][i][ixs], '-', label='{0}'.format( star_name ) )
         fwhm_med_arrs += [ np.median( fwhm_arr_k, axis=1 ) ]
-    fwhm_med_arrs = np.column_stack( fwhm_med_arrs )
+    # Median seeing across all stars, with one array per chip:
+    fwhm_med_arrs = np.column_stack( fwhm_med_arrs ) 
 
     plt.ylabel( 'PSF FWHM (pixels)' )
     plt.xlabel( 'Image number' )
@@ -875,7 +890,11 @@ def extract_spectra( stellar ):
                 if ( stellar.header_kws['gain']==None ):
                     gain = 1.0
                 else:
-                    gain = header0[stellar.header_kws['gain']]
+                    try:
+                        gain = header0[stellar.header_kws['gain']]
+                    except:
+                        headerk = image_hdu[k+1].read_header()
+                        gain = headerk[stellar.header_kws['gain']]
 
                 # Cut out a subarray containing the spectrum data:
                 if stellar.disp_axis==0:
@@ -961,6 +980,7 @@ def extract_spectra( stellar ):
                         darray_fracupper = float( crossdisp_row[ix_frac_u] )*nfracpix_u
                     else:
                         darray_fracupper = 0
+
 
                     # Now identify pixels above trace for sky:
                     usky_l = int( np.ceil( crossdisp_central_pix ) + stellar.sky_inner_radius )
