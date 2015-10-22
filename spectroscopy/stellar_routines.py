@@ -748,6 +748,7 @@ def fit_traces( stellar, make_plots=False ):
 
 def extract_spectra( stellar ):
 
+
     # Read in the list of science images and traces:
     science_images_list_path = os.path.join( stellar.adir, stellar.science_images_list )
     science_images = np.loadtxt( science_images_list_path, dtype=str )
@@ -761,7 +762,14 @@ def extract_spectra( stellar ):
         stellar.goodbad = np.ones( nimages )
     if len( badpix_maps )!=nimages:
         pdb.set_trace()
-
+    # Check to see if a list of filenames for the extracted spectra
+    # has been provided:
+    if ( stellar.spectra_filenames!=None )*( stellar.spectra_filenames!=[] ):
+        spec_filenames_provided = True
+        if len( stellar.spectra_filenames )!=nimages:
+            pdb.set_trace()
+    else:
+        spec_filenames_provided = False
     # Read in the trace files and open output files for the science spectra:
     science_traces_lists = []
     science_spectra_lists_ofiles = []
@@ -862,8 +870,6 @@ def extract_spectra( stellar ):
                 dl = disp_bounds_ki[0]
                 du = disp_bounds_ki[1]
 
-                #for j in range( ntraces ): # BELOW HERE USED TO BE INDENTED
-
                 # Read in the array containing the trace fit:
                 trace_filepath_ki = os.path.join( stellar.adir, science_traces_list_ki[j] )
                 trace_hdu = fitsio.FITS( trace_filepath_ki )
@@ -872,6 +878,12 @@ def extract_spectra( stellar ):
                 image_root = image_filename[:image_filename.rfind('.')]
                 disp_pixs = trace_hdu[1].read_column( 'DISPPIXS') 
                 trarray = trace_hdu[1].read_column( 'TRACE')
+                # In case the dispersion axis bounds have been
+                # changed between fitting the spectral traces
+                # and this step, i.e. spectral extraction:
+                ixs = ( disp_pixs>=dl )*( disp_pixs<=du )
+                disp_pixs = disp_pixs[ixs]
+                trarray = trarray[ixs]
 
                 # Load in the image and header: # THIS IS NOW DONE ABOVE
                 #print '\n ... extracting spectrum from image {0} of {1}'.format( i+1, ntraces )
@@ -1064,8 +1076,11 @@ def extract_spectra( stellar ):
                                                     ( 'skyppix', np.float64 ) ] )
                 # Define filename for the output spectrum of
                 # the current star for the current image:
-                ospec_root = 'spec1d_{0}'.format( image_root )
-                ospec_name = '{0}.fits'.format( ospec_root )
+                if spec_filenames_provided==True:
+                    ospec_name = stellar.spectra_filenames[j]
+                else:
+                    ospec_root = 'spec1d_{0}'.format( image_root )
+                    ospec_name = '{0}.fits'.format( ospec_root )
                 ospec_ext = 'spectra/{0}'.format( star_name_ki )
                 ospec_ext = os.path.join( ospec_ext, ospec_name )
                 ospec_filepath = os.path.join( stellar.adir, ospec_ext )
@@ -1089,7 +1104,6 @@ def extract_spectra( stellar ):
                 header = { 'IMAGE':image_filename, 'TRACE':science_traces_list_ki[j], 'FWHM':fwhm_ki }
                 fits.write( data, header=header )
                 fits.close()
-                                                          
                 print ' ... saved {0}'.format( ospec_filepath )
                 science_spectra_list_ofile_ki.write( '{0}\n'.format( ospec_ext ) )
 

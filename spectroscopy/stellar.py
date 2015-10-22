@@ -18,6 +18,8 @@ class stellar():
         self.science_images_list = ''
         self.badpix_static = ''
         self.science_traces_list = ''
+        # Option to provide list of names for output spectra:
+        self.spectra_filenames = [] 
 
         # Keywords for some basic variables contained
         # in the image headers:
