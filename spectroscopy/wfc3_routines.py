@@ -43,7 +43,7 @@ def calc_spectra_variations( spectra, ref_spectrum, max_wavshift=5, dwav=0.01, s
     else:
         smoothing_sig = None
 
-    # Interpolate the reference spectrum on to a grid cor
+    # Interpolate the reference spectrum on to a grid of
     # increments equal to the dwav shift increment:
     dwavs = np.r_[-max_wavshift:max_wavshift+dwav:dwav]
     nshifts = len( dwavs )
@@ -87,7 +87,7 @@ def calc_spectra_variations( spectra, ref_spectrum, max_wavshift=5, dwav=0.01, s
         enoise[i,:] = np.sqrt( spectra[i,:] )/ref_spectrum
         wavshifts[i] = dwavs[ix]
         vstretches = vstretches_i[ix]
-
+        
     return dspec, wavshifts, vstretches, enoise
 
 def calc_spectra_variations_WORKING( spectra, ref_spectrum, max_wavshift=5, dwav=0.01, smoothing_fwhm=None, disp_bound_ixs=[] ):
