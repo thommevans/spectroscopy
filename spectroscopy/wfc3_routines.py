@@ -786,12 +786,13 @@ def extract_spatscan_specra( image_cube, ap_radius=60, ninterp=10000, cross_axis
         # Interpolate cross-dispersion profile to finer grid
         # in order to track sub-pixel shifts:
         cdpf = np.interp( xf, x, cdp )
+        # Only consider points above the background level, 
+        # otherwise blank sky will bias the result:
+        thresh = cdp.min() + 0.05*( cdp.max()-cdp.min() )
+        ixs = ( cdpf>thresh )
         # Determine the center of the scan by taking the
         # point midway between the edges:
-        thresh = 0.2*np.median( cdp )
-        ixs = ( cdpf>thresh )
         cdcs[i] = np.mean( xf[ixs] )
-        #print 'cross_center ', i, cdcs[i], xf[ixs].min(), xf[ixs].max()
         # Determine the cross-dispersion coordinates between
         # which the integration will be performed:
         xmin = max( [ 0, cdcs[i] - ap_radius ] )
@@ -803,6 +804,14 @@ def extract_spatscan_specra( image_cube, ap_radius=60, ninterp=10000, cross_axis
         xmax_full = int( np.floor( xmax ) )
         ixs_full = ( x>=xmin_full )*( x<=xmax_full )
         spectra[i,:] = np.sum( image[ixs_full,:], axis=cross_axis )
+        #plt.figure()
+        #plt.imshow(image,interpolation='nearest',aspect='auto')
+        #plt.figure()
+        #z=np.zeros(np.shape(image))
+        #z[ixs_full,:] = 1
+        #plt.imshow(z,interpolation='nearest',aspect='auto')
+        #pdb.set_trace()
+        
         # Determine any rows that are partially contained
         # within the aperture at either end of the scan and
         # add their weighted contributions to the spectrum:
