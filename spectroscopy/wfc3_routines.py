@@ -760,7 +760,7 @@ def calc_spectra_variations_ORIGINAL( spectra, ref_spectrum, max_wavshift=5, dwa
         vstretches[j] = vstretches_j[ix]
     return wavshifts, vstretches
 
-def extract_spatscan_specra( image_cube, ap_radius=60, ninterp=10000, cross_axis=0, disp_axis=1, frame_axis=2 ):
+def extract_spatscan_spectra( image_cube, ap_radius=60, ninterp=10000, cross_axis=0, disp_axis=1, frame_axis=2 ):
     """
     GIVEN IMAGES WILL CALCULATE THE CENTER OF THE SPATIAL
     SCAN AND INTEGRATE WITHIN SPECIFIED APERTURE ABOUT 
