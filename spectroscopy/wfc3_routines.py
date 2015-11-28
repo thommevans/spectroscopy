@@ -819,5 +819,13 @@ def extract_spatscan_spectra( image_cube, ap_radius=60, ninterp=10000, cross_axi
         spectra[i,:] += image[xlow_partial,:]
         xupp_partial = xmax - xmax_full
         spectra[i,:] += image[xupp_partial,:]
+        if 0:#i>0:
+            plt.close('all')
+            plt.figure()
+            plt.plot(cdp)
+            plt.axvline(cdcs[i])
+            plt.figure()
+            plt.plot(spectra[i,:])
+            pdb.set_trace()
 
     return cdcs, spectra
