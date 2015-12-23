@@ -63,12 +63,13 @@ def identify_bad_pixels( stellar ):
                 stellar.star_names += [ star_names_i ]
     
     # Read in the full set of science images:
-    science_images_list_path = os.path.join( stellar.adir, stellar.science_images_full_list )
-    science_images = np.loadtxt( science_images_list_path, dtype=str )
-    nimages = len( science_images )
-    sciences = []
-    badpix_statics = []
+    science_images_full_list_path = os.path.join( stellar.adir, stellar.science_images_full_list )
+    science_images_full = np.loadtxt( science_images_full_list_path, dtype=str )
+    nimages = len( science_images_full )
+    #sciences = []
 
+    # Check if a filepath to a static badpixel map has been provided:
+    #badpix_statics = []
     if ( stellar.badpix_static!=None )*( stellar.badpix_static!='' ):
         badpix_path = os.path.join( stellar.adir, stellar.badpix_static )
         badpix_static_hdu = fitsio.FITS( badpix_path )
@@ -79,8 +80,8 @@ def identify_bad_pixels( stellar ):
 
     # Load the list of filenames that will be used to store
     # the bad pixel output:
-    badpix_maps_list_path = os.path.join( stellar.adir, stellar.badpix_maps_full_list )
-    badpix_maps_filenames = np.loadtxt( badpix_maps_list_path, dtype=str )
+    badpix_maps_full_list_path = os.path.join( stellar.adir, stellar.badpix_maps_full_list )
+    badpix_maps_filenames = np.loadtxt( badpix_maps_full_list_path, dtype=str )
     if len( badpix_maps_filenames )!=nimages:
         pdb.set_trace() # should be one bad pixel map per image
 
@@ -93,7 +94,7 @@ def identify_bad_pixels( stellar ):
     # Loop over each FITS file:
     for j in range( nimages ):
         # Load current image and measure dimensions of current extension:
-        image_filename = science_images[j]
+        image_filename = science_images_full[j]
         image_root = image_filename[:image_filename.rfind('.')]
         image_filepath = os.path.join( stellar.ddir, image_filename )
         image_hdu_current = fitsio.FITS( image_filepath, 'rw' )
@@ -112,9 +113,9 @@ def identify_bad_pixels( stellar ):
             dims = np.shape( current_data )
             disp_pixrange = np.arange( dims[stellar.disp_axis] )
             crossdisp_pixrange = np.arange( dims[stellar.crossdisp_axis] )
-            if (j+1)%20==0:
-                print '... up to image {0} of {1}, chip {2} of {3}'\
-                      .format( j+1, nimages, k+1, stellar.n_exts )
+            #if (j+1)%20==0:
+            #    print '... up to image {0} of {1}, chip {2} of {3}'\
+            #          .format( j+1, nimages, k+1, stellar.n_exts )
             # Array that keeps a record of those frames that have
             # not previously been flagged as bad, and hence can be
             # used in the slider:
@@ -144,7 +145,7 @@ def identify_bad_pixels( stellar ):
                 if j==0:
                     slider_data = []
                     for jj in ixs_slide:
-                        image_filename_jj = science_images[jj]
+                        image_filename_jj = science_images_full[jj]
                         image_root_jj = image_filename_jj[:image_filename_jj.rfind('.')]
                         image_filepath_jj = os.path.join( stellar.ddir, image_filename_jj )
                         image_hdu_jj = fitsio.FITS( image_filepath_jj )
@@ -158,7 +159,7 @@ def identify_bad_pixels( stellar ):
                     # Add a new slide to the leading edge,
                     # unless we're close to the end:
                     if j<nimages-nslide:
-                        image_filename_lead = science_images[ixs_slide[-1]]
+                        image_filename_lead = science_images_full[ixs_slide[-1]]
                         image_root_lead = image_filename_lead[:image_filename_lead.rfind('.')]
                         image_filepath_lead = os.path.join( stellar.ddir, image_filename_lead )
                         image_hdu_lead = fitsio.FITS( image_filepath_lead )
@@ -198,7 +199,10 @@ def identify_bad_pixels( stellar ):
                     sig_sub = np.std( subslider[:,:,ixs_use], axis=2 )
                     delsigmas_sub = abs( ( subdarray - med_sub )/sig_sub )
                     ixs_bad = ( delsigmas_sub>nsigma_thresh )
-                    print 'Max outlier  = {0:.2f} sigma'.format( delsigmas_sub.max() )
+                    print_str =  '... image {0} of {1}, chip {2} of {3}, star {4} of {5}'\
+                                 .format( j+1, nimages, k+1, stellar.n_exts, l+1, nstars_k )
+                    print_str = '{0} --> Max outlier = {1:.2f} sigma'.format( print_str, delsigmas_sub.max() )
+                    print print_str
                     frac_bad = ixs_bad.sum()/float( ixs_bad.size )
                     if ( frac_bad>1e-3 )*( i<niterations-1 ):
                             untainted_frames[j] = 0
@@ -265,10 +269,14 @@ def fit_traces( stellar, make_plots=False ):
     science_images_full_list_path = os.path.join( stellar.adir, stellar.science_images_full_list )
     science_images_full = np.loadtxt( science_images_full_list_path, dtype=str )
     nimages = len( science_images_full )
-    badpix_maps_full_list_path = os.path.join( stellar.adir, stellar.badpix_maps_full_list )
-    badpix_maps_full = np.loadtxt( badpix_maps_full_list_path, dtype=str )
-    if len( badpix_maps_full )!=nimages:
-        pdb.set_trace()
+    if ( stellar.badpix_maps_full_list!=None )*( stellar.badpix_maps_full_list!='' ):
+        badpix_flagging = True
+        badpix_maps_full_list_path = os.path.join( stellar.adir, stellar.badpix_maps_full_list )
+        badpix_maps_full = np.loadtxt( badpix_maps_full_list_path, dtype=str )
+        if len( badpix_maps_full )!=nimages:
+            pdb.set_trace()
+    else:
+        badpix_flagging = False
 
     # Load the list of filenames that will be used to store
     # the bad pixel output:
@@ -292,7 +300,7 @@ def fit_traces( stellar, make_plots=False ):
     if stellar.n_exts==1:
         for i in range( stellar.nstars ):
             #ext = 'science_traces_{0}.lst'.format( stellar.star_names[k] )
-            science_trace_ofilepath = os.path.join( stellar.adir, stellar.science_traces_list[i] )
+            science_trace_ofilepath = os.path.join( stellar.adir, stellar.science_traces_lists[i] )
             science_traces_ofiles += [ open( science_trace_ofilepath, 'w' ) ]
             #stellar.science_traces_list += [ ext ]
             #ext = 'science_images_{0}.lst'.format( stellar.star_names[i] )
@@ -324,8 +332,9 @@ def fit_traces( stellar, make_plots=False ):
             #science_images_ofiles += [ science_images_ofiles_k ]
     science_image_ofilepath = os.path.join( stellar.adir, stellar.science_images_list )
     science_images_ofile = open( science_image_ofilepath, 'w' )
-    badpix_maps_ofilepath = os.path.join( stellar.adir, stellar.badpix_maps_list )
-    badpix_maps_ofile = open( badpix_maps_ofilepath, 'w' )
+    if badpix_flagging==True:
+        badpix_maps_ofilepath = os.path.join( stellar.adir, stellar.badpix_maps_list )
+        badpix_maps_ofile = open( badpix_maps_ofilepath, 'w' )
 
     #nimages=5#delete
     #stellar.goodbad=np.ones(nimages)#delete
@@ -355,18 +364,22 @@ def fit_traces( stellar, make_plots=False ):
         t1=time.time()
         # Load current image and associated bad pixel map:
         image_filename = science_images_full[j]
-        badpix_map_filename = badpix_maps_full[j]
         image_root = image_filename[:image_filename.rfind('.')]
         image_filepath = os.path.join( stellar.ddir, image_filename )
         image_hdu = fitsio.FITS( image_filepath )
-        badpix_map_filepath = os.path.join( stellar.ddir, badpix_map_filename )
-        badpix_hdu = fitsio.FITS( badpix_map_filepath )
+        if badpix_flagging==True:
+            badpix_map_filename = badpix_maps_full[j]
+            badpix_map_filepath = os.path.join( stellar.ddir, badpix_map_filename )
+            badpix_hdu = fitsio.FITS( badpix_map_filepath )
 
         # Loop over each FITS extension individually:
         for k in range( stellar.n_exts ):
 
             darray = image_hdu[k+1].read()
-            badpix = badpix_hdu[k+1].read()
+            if badpix_flagging==True:
+                badpix = badpix_hdu[k+1].read()
+            else:
+                badpix = None
             darray = np.ma.masked_array( darray, mask=badpix )
 
             arr_dims = np.shape( darray )
@@ -670,7 +683,8 @@ def fit_traces( stellar, make_plots=False ):
         # record of the badpixel map and image:
         if stellar.goodbad[j]==1:
             science_images_ofile.write( '{0}\n'.format( image_filename ) ) 
-            badpix_maps_ofile.write( '{0}\n'.format( badpix_map_filename ) ) 
+            if badpix_flagging==True:
+                badpix_maps_ofile.write( '{0}\n'.format( badpix_map_filename ) ) 
     # Summarise the PSF FWHM info:
     #med = np.median( fwhms, axis=0 ) # median PSF FWHM for each star
     #std = np.std( fwhms, axis=0 ) # PSF FWHM scatter for each star
@@ -738,8 +752,10 @@ def fit_traces( stellar, make_plots=False ):
                 science_traces_ofiles[k][i].close()
                 print ' {0}. {1} --> {2}'.format( counter, stellar.star_names[k][i], \
                                                   stellar.science_traces_list[k][i] )
-    print 'with corresponding list of science images and badpix maps in:\n {0}\n {1}'\
-          .format( stellar.science_images_list, stellar.badpix_maps_list )
+    print 'with corresponding list of science images and badpix maps in:\n {0}'\
+          .format( stellar.science_images_list )
+    if badpix_flagging==True:
+        print 'and badpix maps in:\n {0}'.format( stellar.badpix_maps_list )
     plt.ion()
 
     return None
