@@ -36,7 +36,7 @@ class stellar():
         self.badpix_static = '' # file path to a static badpixel map
         # A list containing filenames that will be used to save lists of the
         # file paths pointing to the extracted spectral traces:
-        self.science_traces_list = ''
+        self.science_traces_lists = ''
         # Option to provide list of names for output spectra:
         self.science_spectra_filenames = [] 
 

@@ -319,7 +319,7 @@ def fit_traces( stellar, make_plots=False ):
             #science_images_ofiles_k = []
             for i in range( stellar.nstars[k] ):
                 #ext = 'science_traces_{0}.lst'.format( stellar.star_names[k][i] )
-                science_trace_ofilepath = os.path.join( stellar.adir, stellar.science_traces_list[k][i] )
+                science_trace_ofilepath = os.path.join( stellar.adir, stellar.science_traces_lists[k][i] )
                 science_traces_ofiles_k += [ open( science_trace_ofilepath, 'w' ) ]
                 #science_traces_list_k += [ ext ]
                 #ext = 'science_images_{0}.lst'.format( stellar.star_names[k][i] )
@@ -743,7 +743,7 @@ def fit_traces( stellar, make_plots=False ):
         for i in range( stellar.nstars ):
             science_traces_ofiles[i].close()
             print ' {0}. {1} --> {2}'\
-                  .format( i+1, stellar.star_names[i], stellar.science_traces_list[i] )
+                  .format( i+1, stellar.star_names[i], stellar.science_traces_lists[i] )
     else:
         counter = 0
         for k in range( stellar.n_exts ):
@@ -751,7 +751,7 @@ def fit_traces( stellar, make_plots=False ):
                 counter += 1
                 science_traces_ofiles[k][i].close()
                 print ' {0}. {1} --> {2}'.format( counter, stellar.star_names[k][i], \
-                                                  stellar.science_traces_list[k][i] )
+                                                  stellar.science_traces_lists[k][i] )
     print 'with corresponding list of science images and badpix maps in:\n {0}'\
           .format( stellar.science_images_list )
     if badpix_flagging==True:
@@ -759,7 +759,6 @@ def fit_traces( stellar, make_plots=False ):
     plt.ion()
 
     return None
-
 
 
 def extract_spectra( stellar ):
@@ -796,25 +795,27 @@ def extract_spectra( stellar ):
     # filenames for the individual spectra...
     if stellar.n_exts==1:
         for i in range( stellar.nstars ):
-            science_spectra_list_ofilepath = os.path.join( stellar.adir, stellar.science_spectra_list[i] )
+            science_spectra_list_ofilepath = os.path.join( stellar.adir, stellar.science_spectra_lists[i] )
             science_spectra_list_ofilepaths += [ science_spectra_list_ofilepath ]
             science_spectra_list_ofiles += [ open( science_spectra_list_ofilepath, 'w' ) ]
             #science_spectra_list_ofilepath = os.path.join( stellar.adir, stellar.science_spectra_list[i] )
-            science_traces_ifilepath = os.path.join( stellar.adir, stellar.science_traces_list[i] )
+            science_traces_ifilepath = os.path.join( stellar.adir, stellar.science_traces_lists[i] )
             science_traces_lists += [ np.loadtxt( science_traces_ifilepath, dtype=str ) ]
     else:
         for k in range( stellar.n_exts ):
-            #science_spectra_ofilepaths_k = []
+            science_spectra_list_ofilepaths_k = []
             science_spectra_list_ofiles_k = []
             science_traces_lists_k = []
             for i in range( stellar.nstars[k] ):
-                science_spectra_list_ofilepath = os.path.join( stellar.adir, stellar.science_spectra_list[k][i] )
-                science_spectra_list_ofilepaths += [ science_spectra_list_ofilepath ]
+                science_spectra_list_ofilepath = os.path.join( stellar.adir, stellar.science_spectra_lists[k][i] )
+                science_spectra_list_ofilepaths_k += [ science_spectra_list_ofilepath ]
                 science_spectra_list_ofiles_k += [ open( science_spectra_list_ofilepath, 'w' ) ]
-                science_traces_ifilepath = os.path.join( stellar.adir, stellar.science_traces_list[k][i] )
+                science_traces_ifilepath = os.path.join( stellar.adir, stellar.science_traces_lists[k][i] )
                 science_traces_lists_k += [ np.loadtxt( science_traces_ifilepath, dtype=str ) ]
+            science_spectra_list_ofilepaths += [ science_spectra_list_ofilepaths_k ]
             science_spectra_list_ofiles += [ science_spectra_list_ofiles_k ]
             science_traces_lists += [ science_traces_lists_k ]
+
     # Loop over each image, and extract the spectrum
     # for each star on each image:
     eps = 1e-10
@@ -1122,7 +1123,6 @@ def extract_spectra( stellar ):
                 fits.close()
                 print ' ... saved {0}'.format( ospec_filepath )
                 science_spectra_list_ofile_ki.write( '{0}\n'.format( ospec_ext ) )
-
             # Save the current list of spectra files:
             #science_spectra_list_ofile_ki.close()
             #print '\nSaved list of spectra in:\n{0}'.format( science_spectra_list_opath )
@@ -1133,7 +1133,7 @@ def extract_spectra( stellar ):
         for i in range( stellar.nstars ):
             science_spectra_list_ofiles[i].close()
             print ' {0}. {1} --> {2}'\
-                  .format( i+1, stellar.star_names[i], stellar.science_spectra_list[i] )
+                  .format( i+1, stellar.star_names[i], science_spectra_list_ofilepaths[i] )
     else:
         counter = 0
         for k in range( stellar.n_exts ):
@@ -1141,14 +1141,11 @@ def extract_spectra( stellar ):
                 counter += 1
                 science_spectra_list_ofiles[k][i].close()
                 print ' {0}. {1} --> {2}'.format( counter, stellar.star_names[k][i], \
-                                                  stellar.science_spectra_list[k][i] )
+                                                  science_spectra_list_ofilepaths[k][i] )
     print 'with corresponding list of science images and badpix maps in:\n {0}\n {1}'\
           .format( stellar.science_images_list, stellar.badpix_maps_list )
  
-
     return None
-
-    
 
     
 def calibrate_wavelength_scale( stellar, poly_order=1, make_plots=False ):
@@ -1236,26 +1233,26 @@ def calibrate_wavelength_scale( stellar, poly_order=1, make_plots=False ):
     # Now go through all the spectra that have already been generated
     # and add a column to the fits table containing the wavelengths:
     print '\nSuccessfully calibrated the wavelength scale.'
-    if stellar.science_spectra_list==None:
+    if stellar.science_spectra_lists==None:
         print '\nNo science_spectra_lists attribute provided -'
         print 'spectra not updated'
     else:
-        print 'Adding wavelength solutions to the existing spectrum files...'
+        print 'Adding wavelength solutions to the existing spectrum files for stars:'
         science_images_list = os.path.join( stellar.adir, stellar.science_images_list )
         science_image_files = np.loadtxt( science_images_list, dtype=str )
-
         spectra_files = []
         nspectra = []
         for k in range( stellar.nstars ):
             print ' ... {0}'.format( stellar.star_names[k] )
             science_spectra_list_filepath_k = os.path.join( stellar.adir, \
-                                                            stellar.science_spectra_list[k] )
+                                                            stellar.science_spectra_lists[k] )
             science_spectra_list_k = np.loadtxt( science_spectra_list_filepath_k, dtype=str )
             spectra_files += [ science_spectra_list_k ]
             nspectra_k = len( science_spectra_list_k )
             nspectra += [ nspectra_k ]
             for j in range( nspectra_k ):
                 spectra_file_kj = os.path.join( stellar.adir, spectra_files[k][j] )
+                #print nspectra_k, spectra_file_kj
                 spectrum_hdu = fitsio.FITS( spectra_file_kj, 'rw' )
                 disp_pixs = spectrum_hdu[1]['disp_pixs'].read()
                 offset = np.ones( len( disp_pixs ) )
