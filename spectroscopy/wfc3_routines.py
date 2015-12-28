@@ -86,7 +86,7 @@ def calc_spectra_variations( spectra, ref_spectrum, max_wavshift=5, dwav=0.01, s
         dspec[i,:] = diffs[ix,:]/ref_spectrum
         enoise[i,:] = np.sqrt( spectra[i,:] )/ref_spectrum
         wavshifts[i] = dwavs[ix]
-        vstretches = vstretches_i[ix]
+        vstretches[i] = vstretches_i[ix]
         
     return dspec, wavshifts, vstretches, enoise
 
