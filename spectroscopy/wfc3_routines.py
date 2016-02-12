@@ -139,8 +139,10 @@ def extract_spatscan_spectra( image_cube, ap_radius=60, ninterp=10000, cross_axi
         # within the aperture at either end of the scan and
         # add their weighted contributions to the spectrum:
         xlow_partial = xmin_full - xmin
-        spectra[i,:] += image[xlow_partial,:]
+        #spectra[i,:] += image[xlow_partial,:]
+        spectra[i,:] += xlow_partial*image[xmin_full-1,:]
         xupp_partial = xmax - xmax_full
-        spectra[i,:] += image[xupp_partial,:]
+        #spectra[i,:] += image[xupp_partial,:]
+        spectra[i,:] += xupp_partial*image[xmax_full+1,:]
 
     return cdcs, spectra
