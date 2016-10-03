@@ -51,7 +51,9 @@ def calc_spectra_variations( spectra, ref_spectrum, max_wavshift=5, dwav=0.01, s
     xi = np.arange( -pad, ndisp+pad )
     z = np.zeros( pad )
     ref_spectrumi = np.concatenate( [ z, ref_spectrum, z ] )
+    #print 'aaaaa'
     interpf = scipy.interpolate.interp1d( xi, ref_spectrumi, kind='cubic' )
+    #print 'bbbbb'
     shifted = np.zeros( [ nshifts, ndisp ] )
     for i in range( nshifts ):
         shifted[i,:] = interpf( x+dwavs[i] )
@@ -126,7 +128,7 @@ def extract_spatscan_spectra( image_cube, ap_radius=60, ninterp=10000, cross_axi
         # Determine the cross-dispersion coordinates between
         # which the integration will be performed:
         xmin = max( [ 0, cdcs[i] - ap_radius ] )
-        xmax = min( [ cdcs[i] + ap_radius, ncross ] )
+        xmax = min( [ cdcs[i] + ap_radius, ncross-1 ] )
         # Determine the rows that are fully contained
         # within the aperture and integrate along the
         # cross-dispersion axis:
@@ -138,18 +140,11 @@ def extract_spatscan_spectra( image_cube, ap_radius=60, ninterp=10000, cross_axi
         # Determine any rows that are partially contained
         # within the aperture at either end of the scan and
         # add their weighted contributions to the spectrum:
-        xlow_partial = xmin_full - xmin
-        #spectra[i,:] += image[xlow_partial,:]
-        spectra[i,:] += xlow_partial*image[xmin_full-1,:]
-        xupp_partial = xmax - xmax_full
-        #spectra[i,:] += image[xupp_partial,:]
-        spectra[i,:] += xupp_partial*image[xmax_full+1,:]
-
-        #plt.ion()
-        #plt.figure()
-        #plt.plot(x,cdp,'-b')
-        #plt.axvline(cdcs[i]-ap_radius)
-        #plt.axvline(cdcs[i]+ap_radius)
-        #pdb.set_trace()
+        if xmin_full>0:
+            xlow_partial = xmin_full - xmin
+            spectra[i,:] += xlow_partial*image[xmin_full,:]
+        if xmax_full+1<ncross:
+            xupp_partial = xmax - xmax_full
+            spectra[i,:] += xupp_partial*image[xmax_full+1,:]
 
     return cdcs, spectra
