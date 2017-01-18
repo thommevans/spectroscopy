@@ -88,7 +88,7 @@ def calc_spectra_variations( spectra, ref_spectrum, max_wavshift=5, dwav=0.01, s
         enoise[i,:] = np.sqrt( spectra[i,:] )#/ref_spectrum
         wavshifts[i] = dwavs[ix]
         vstretches[i] = vstretches_i[ix]
-        
+        print '--> wavshift={0:.3f}, vstretch={1:.3f}'.format( dwavs[ix], vstretches_i[ix] )
     return dspec, wavshifts, vstretches, enoise
 
 
@@ -146,5 +146,17 @@ def extract_spatscan_spectra( image_cube, ap_radius=60, ninterp=10000, cross_axi
         if xmax_full+1<ncross:
             xupp_partial = xmax - xmax_full
             spectra[i,:] += xupp_partial*image[xmax_full+1,:]
+
+        # DELETE BELOW
+        #plt.figure()
+        #plt.subplot( 121 )
+        #plt.imshow( image, interpolation='nearest', aspect='auto', vmin=0 )
+        #plt.axhline( cdcs[i], c='m' )
+        #plt.subplot( 122 )
+        #plt.plot( xf, cdpf, '-c' )
+        #plt.plot( xf[ixs], cdpf[ixs], '-r', lw=2 )
+        #plt.axvline( cdcs[i], c='k', ls='-' )
+        #pdb.set_trace()
+        # DELETE ABOVE
 
     return cdcs, spectra
