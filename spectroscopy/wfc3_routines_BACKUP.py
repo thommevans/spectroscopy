@@ -51,14 +51,16 @@ def calc_spectra_variations( spectra, ref_spectrum, max_wavshift=5, dwav=0.01, s
     xi = np.arange( -pad, ndisp+pad )
     z = np.zeros( pad )
     ref_spectrumi = np.concatenate( [ z, ref_spectrum, z ] )
+    #print 'aaaaa'
     interpf = scipy.interpolate.interp1d( xi, ref_spectrumi, kind='cubic' )
+    #print 'bbbbb'
     shifted = np.zeros( [ nshifts, ndisp ] )
     for i in range( nshifts ):
         shifted[i,:] = interpf( x+dwavs[i] )
 
     # Now loop over the individual spectra and determine which
     # of the shifted reference spectra gives the best match:
-    print( '\nDetermining shifts and stretches:' )
+    print '\nDetermining shifts and stretches:'
     wavshifts = np.zeros( nframes )
     vstretches = np.zeros( nframes )
     dspec = np.zeros( [ nframes, ndisp ] )
@@ -66,10 +68,9 @@ def calc_spectra_variations( spectra, ref_spectrum, max_wavshift=5, dwav=0.01, s
     ix0 = disp_bound_ixs[0]
     ix1 = disp_bound_ixs[1]
     A = np.ones([ndisp,2])
-    A = np.column_stack( [ A, np.arange( ndisp ) ] ) # testing
     coeffs = []
     for i in range( nframes ):
-        print( i+1, nframes )
+        print i+1, nframes
         rms_i = np.zeros( nshifts )
         diffs = np.zeros( [ nshifts, ndisp ] )
         vstretches_i = np.zeros( nshifts )
@@ -87,7 +88,15 @@ def calc_spectra_variations( spectra, ref_spectrum, max_wavshift=5, dwav=0.01, s
         enoise[i,:] = np.sqrt( spectra[i,:] )#/ref_spectrum
         wavshifts[i] = dwavs[ix]
         vstretches[i] = vstretches_i[ix]
-        
+        print '--> wavshift={0:.3f}, vstretch={1:.3f}'.format( dwavs[ix], vstretches_i[ix] )
+        if 0:
+            plt.ion()
+            plt.figure()
+            plt.plot( dwavs, rms_i, '-ok' )
+            plt.axvline( dwavs[ix], c='r' )
+            plt.title( wavshifts[i] )
+            pdb.set_trace()
+            plt.close('all')
     return dspec, wavshifts, vstretches, enoise
 
 
@@ -107,9 +116,9 @@ def extract_spatscan_spectra( image_cube, ap_radius=60, ninterp=10000, cross_axi
     x = np.arange( ncross )
     nf = int( ninterp*len( x ) )
     xf = np.r_[ x.min():x.max():1j*nf ]
-    print( '\nExtracting spectra from 2D images:' )
+    print '\nExtracting spectra from 2D images:'
     for i in range( nframes ):
-        print( '... image {0} of {1}'.format( i+1, nframes ) )
+        print '... image {0} of {1}'.format( i+1, nframes )
         image = image_cube[:,:,i]
         # Extract the cross-dispersion profile, i.e. along
         # the axis of the spatial scan:
@@ -127,7 +136,7 @@ def extract_spatscan_spectra( image_cube, ap_radius=60, ninterp=10000, cross_axi
         # Determine the cross-dispersion coordinates between
         # which the integration will be performed:
         xmin = max( [ 0, cdcs[i] - ap_radius ] )
-        xmax = min( [ cdcs[i] + ap_radius, ncross ] )
+        xmax = min( [ cdcs[i] + ap_radius, ncross-1 ] )
         # Determine the rows that are fully contained
         # within the aperture and integrate along the
         # cross-dispersion axis:
@@ -139,18 +148,23 @@ def extract_spatscan_spectra( image_cube, ap_radius=60, ninterp=10000, cross_axi
         # Determine any rows that are partially contained
         # within the aperture at either end of the scan and
         # add their weighted contributions to the spectrum:
-        xlow_partial = xmin_full - xmin
-        #spectra[i,:] += image[xlow_partial,:]
-        spectra[i,:] += xlow_partial*image[xmin_full-1,:]
-        xupp_partial = xmax - xmax_full
-        #spectra[i,:] += image[xupp_partial,:]
-        spectra[i,:] += xupp_partial*image[xmax_full+1,:]
+        if xmin_full>0:
+            xlow_partial = xmin_full - xmin
+            spectra[i,:] += xlow_partial*image[xmin_full,:]
+        if xmax_full+1<ncross:
+            xupp_partial = xmax - xmax_full
+            spectra[i,:] += xupp_partial*image[xmax_full+1,:]
 
-        #plt.ion()
+        # DELETE BELOW
         #plt.figure()
-        #plt.plot(x,cdp,'-b')
-        #plt.axvline(cdcs[i]-ap_radius)
-        #plt.axvline(cdcs[i]+ap_radius)
+        #plt.subplot( 121 )
+        #plt.imshow( image, interpolation='nearest', aspect='auto', vmin=0 )
+        #plt.axhline( cdcs[i], c='m' )
+        #plt.subplot( 122 )
+        #plt.plot( xf, cdpf, '-c' )
+        #plt.plot( xf[ixs], cdpf[ixs], '-r', lw=2 )
+        #plt.axvline( cdcs[i], c='k', ls='-' )
         #pdb.set_trace()
+        # DELETE ABOVE
 
     return cdcs, spectra

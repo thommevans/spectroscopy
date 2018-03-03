@@ -58,7 +58,7 @@ def calc_spectra_variations( spectra, ref_spectrum, max_wavshift=5, dwav=0.01, s
 
     # Now loop over the individual spectra and determine which
     # of the shifted reference spectra gives the best match:
-    print( '\nDetermining shifts and stretches:' )
+    print '\nDetermining shifts and stretches:'
     wavshifts = np.zeros( nframes )
     vstretches = np.zeros( nframes )
     dspec = np.zeros( [ nframes, ndisp ] )
@@ -69,7 +69,7 @@ def calc_spectra_variations( spectra, ref_spectrum, max_wavshift=5, dwav=0.01, s
     A = np.column_stack( [ A, np.arange( ndisp ) ] ) # testing
     coeffs = []
     for i in range( nframes ):
-        print( i+1, nframes )
+        print i+1, nframes
         rms_i = np.zeros( nshifts )
         diffs = np.zeros( [ nshifts, ndisp ] )
         vstretches_i = np.zeros( nshifts )
@@ -107,9 +107,9 @@ def extract_spatscan_spectra( image_cube, ap_radius=60, ninterp=10000, cross_axi
     x = np.arange( ncross )
     nf = int( ninterp*len( x ) )
     xf = np.r_[ x.min():x.max():1j*nf ]
-    print( '\nExtracting spectra from 2D images:' )
+    print '\nExtracting spectra from 2D images:'
     for i in range( nframes ):
-        print( '... image {0} of {1}'.format( i+1, nframes ) )
+        print '... image {0} of {1}'.format( i+1, nframes )
         image = image_cube[:,:,i]
         # Extract the cross-dispersion profile, i.e. along
         # the axis of the spatial scan:
