@@ -6,7 +6,6 @@ import scipy.optimize
 import scipy.interpolate
 import scipy.ndimage
 import glob
-import atpy
 
 # TODO - wrap these routines up as attributes of spectroscopy
 # opjects somehow.
